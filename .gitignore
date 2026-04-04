@@ -1,0 +1,13 @@
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.db
+*.log
+*.pdb
+*.DS_Store
+.vs/
+*.sha256
+*-workspace
+Checklist.md
