@@ -3,8 +3,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/PasswordDialogs.cs
  * File: PasswordDialogs.cs
+ * Version: 1.0.0
  * Created: 2026-04-04
- * Modified: 2026-04-04
+ * Modified: 2026-04-22
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -31,9 +32,9 @@ namespace Tools.Config
     }
     public class PasswordMetadata
     {
-        public StorageLocation StorageLocation { get; set; }
+        public PasswordLocation Location { get; set; }
         public PasswordRepresentation Representation { get; set; }
-        public string Value { get; set; } // plaintext, encrypted blob, hash, or vault key
+        public string Password { get; set; } // plaintext, encrypted blob, hash, or vault key
     }
 
 }

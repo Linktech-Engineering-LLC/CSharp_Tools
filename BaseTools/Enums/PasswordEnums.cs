@@ -3,8 +3,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Enums/PasswordEnums.cs
  * File: PasswordEnums.cs
+ * Version: 1.0.0
  * Created: 2026-04-04
- * Modified: 2026-04-04
+ * Modified: 2026-04-22
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -32,7 +33,13 @@ namespace Tools.Enums
         PlainText = 2,
         Prompt = 3
     }
-    public enum StorageLocation
+    public enum PasswordTarget
+    {
+        Application,
+        Configuration,
+        Database
+    }
+    public enum PasswordLocation
     {
         Unknown,
         Vault,

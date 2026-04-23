@@ -3,8 +3,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmConfig.Designer.cs
  * File: FrmConfig.Designer.cs
+ * Version: 1.0.0
  * Created: None
- * Modified: 2026-04-04
+ * Modified: 2026-04-22
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -56,17 +57,10 @@ namespace ToolsUI.Config
             txtLogPath = new TextBox();
             label6 = new Label();
             grpSecurity = new GroupBox();
-            grpPasswords = new GroupBox();
-            btnCfgShow = new Button();
-            btnAppShow = new Button();
-            txtCfgPwd = new TextBox();
-            txtAppPwd = new TextBox();
-            label3 = new Label();
-            label2 = new Label();
-            pnlStyle = new Panel();
-            btnEncrypt = new Button();
-            cboPwdStyle = new ComboBox();
-            label1 = new Label();
+            grpPassword = new GroupBox();
+            panel1 = new Panel();
+            btnPasswordEditor = new Button();
+            cboPassword = new ComboBox();
             grpDatabase = new GroupBox();
             numDbPort = new ToolsUI.Controls.NumericTextBox();
             btnTest = new Button();
@@ -80,10 +74,7 @@ namespace ToolsUI.Config
             txtDbHost = new TextBox();
             label12 = new Label();
             label10 = new Label();
-            btnDbfShow = new Button();
             label11 = new Label();
-            txtDbfPwd = new TextBox();
-            label4 = new Label();
             pnlConfigureButtons = new Panel();
             btnRead = new Button();
             btnCancel = new Button();
@@ -103,7 +94,6 @@ namespace ToolsUI.Config
             lstDiagnosticsResults = new ListBox();
             tvDiagnostics = new TreeView();
             toolTip1 = new ToolTip(components);
-            btnAppNew = new Button();
             tabConfig.SuspendLayout();
             pgeConfigure.SuspendLayout();
             pnlConfigure.SuspendLayout();
@@ -111,8 +101,8 @@ namespace ToolsUI.Config
             pnlCfgLeft.SuspendLayout();
             grpPaths.SuspendLayout();
             grpSecurity.SuspendLayout();
-            grpPasswords.SuspendLayout();
-            pnlStyle.SuspendLayout();
+            grpPassword.SuspendLayout();
+            panel1.SuspendLayout();
             grpDatabase.SuspendLayout();
             pnlConfigureButtons.SuspendLayout();
             pgeDiagnostics.SuspendLayout();
@@ -150,7 +140,7 @@ namespace ToolsUI.Config
             pnlConfigure.Dock = DockStyle.Top;
             pnlConfigure.Location = new Point(3, 3);
             pnlConfigure.Name = "pnlConfigure";
-            pnlConfigure.Size = new Size(736, 317);
+            pnlConfigure.Size = new Size(736, 292);
             pnlConfigure.TabIndex = 3;
             // 
             // pnlConfigureGroups
@@ -159,7 +149,7 @@ namespace ToolsUI.Config
             pnlConfigureGroups.Controls.Add(grpDatabase);
             pnlConfigureGroups.Location = new Point(3, 3);
             pnlConfigureGroups.Name = "pnlConfigureGroups";
-            pnlConfigureGroups.Size = new Size(726, 274);
+            pnlConfigureGroups.Size = new Size(726, 249);
             pnlConfigureGroups.TabIndex = 2;
             // 
             // pnlCfgLeft
@@ -168,7 +158,7 @@ namespace ToolsUI.Config
             pnlCfgLeft.Controls.Add(grpSecurity);
             pnlCfgLeft.Location = new Point(0, 0);
             pnlCfgLeft.Name = "pnlCfgLeft";
-            pnlCfgLeft.Size = new Size(395, 274);
+            pnlCfgLeft.Size = new Size(395, 234);
             pnlCfgLeft.TabIndex = 4;
             // 
             // grpPaths
@@ -183,7 +173,7 @@ namespace ToolsUI.Config
             grpPaths.Controls.Add(txtLogPath);
             grpPaths.Controls.Add(label6);
             grpPaths.Dock = DockStyle.Top;
-            grpPaths.Location = new Point(0, 144);
+            grpPaths.Location = new Point(0, 73);
             grpPaths.Name = "grpPaths";
             grpPaths.Size = new Size(395, 127);
             grpPaths.TabIndex = 3;
@@ -276,127 +266,52 @@ namespace ToolsUI.Config
             // 
             // grpSecurity
             // 
-            grpSecurity.Controls.Add(grpPasswords);
-            grpSecurity.Controls.Add(pnlStyle);
+            grpSecurity.Controls.Add(grpPassword);
             grpSecurity.Dock = DockStyle.Top;
             grpSecurity.Location = new Point(0, 0);
             grpSecurity.Name = "grpSecurity";
-            grpSecurity.Size = new Size(395, 144);
+            grpSecurity.Size = new Size(395, 73);
             grpSecurity.TabIndex = 2;
             grpSecurity.TabStop = false;
             grpSecurity.Text = "Security";
             // 
-            // grpPasswords
+            // grpPassword
             // 
-            grpPasswords.Controls.Add(btnAppNew);
-            grpPasswords.Controls.Add(btnCfgShow);
-            grpPasswords.Controls.Add(btnAppShow);
-            grpPasswords.Controls.Add(txtCfgPwd);
-            grpPasswords.Controls.Add(txtAppPwd);
-            grpPasswords.Controls.Add(label3);
-            grpPasswords.Controls.Add(label2);
-            grpPasswords.Dock = DockStyle.Top;
-            grpPasswords.Location = new Point(3, 51);
-            grpPasswords.Name = "grpPasswords";
-            grpPasswords.Size = new Size(389, 85);
-            grpPasswords.TabIndex = 2;
-            grpPasswords.TabStop = false;
-            grpPasswords.Text = "Passwords";
+            grpPassword.Controls.Add(panel1);
+            grpPassword.Dock = DockStyle.Top;
+            grpPassword.Location = new Point(3, 19);
+            grpPassword.Name = "grpPassword";
+            grpPassword.Size = new Size(389, 54);
+            grpPassword.TabIndex = 3;
+            grpPassword.TabStop = false;
+            grpPassword.Text = "Passwords";
             // 
-            // btnCfgShow
+            // panel1
             // 
-            btnCfgShow.Location = new Point(292, 48);
-            btnCfgShow.Name = "btnCfgShow";
-            btnCfgShow.Size = new Size(46, 23);
-            btnCfgShow.TabIndex = 7;
-            btnCfgShow.Tag = "CfgShow";
-            btnCfgShow.Text = "Show";
-            btnCfgShow.UseVisualStyleBackColor = true;
+            panel1.Controls.Add(btnPasswordEditor);
+            panel1.Controls.Add(cboPassword);
+            panel1.Location = new Point(76, 18);
+            panel1.Name = "panel1";
+            panel1.Size = new Size(242, 32);
+            panel1.TabIndex = 0;
             // 
-            // btnAppShow
+            // btnPasswordEditor
             // 
-            btnAppShow.Location = new Point(292, 19);
-            btnAppShow.Name = "btnAppShow";
-            btnAppShow.Size = new Size(46, 23);
-            btnAppShow.TabIndex = 6;
-            btnAppShow.Tag = "AppShow";
-            btnAppShow.Text = "Show";
-            btnAppShow.UseVisualStyleBackColor = true;
+            btnPasswordEditor.Location = new Point(160, 3);
+            btnPasswordEditor.Name = "btnPasswordEditor";
+            btnPasswordEditor.Size = new Size(75, 23);
+            btnPasswordEditor.TabIndex = 1;
+            btnPasswordEditor.Tag = "PasswordEditor";
+            btnPasswordEditor.Text = "&Edit";
+            btnPasswordEditor.UseVisualStyleBackColor = true;
             // 
-            // txtCfgPwd
+            // cboPassword
             // 
-            txtCfgPwd.Location = new Point(104, 48);
-            txtCfgPwd.Name = "txtCfgPwd";
-            txtCfgPwd.PasswordChar = '*';
-            txtCfgPwd.Size = new Size(180, 23);
-            txtCfgPwd.TabIndex = 4;
-            toolTip1.SetToolTip(txtCfgPwd, "Password to Secure the Configuration");
-            // 
-            // txtAppPwd
-            // 
-            txtAppPwd.Location = new Point(106, 19);
-            txtAppPwd.Name = "txtAppPwd";
-            txtAppPwd.PasswordChar = '*';
-            txtAppPwd.Size = new Size(180, 23);
-            txtAppPwd.TabIndex = 3;
-            toolTip1.SetToolTip(txtAppPwd, "Password To Secure the Application");
-            // 
-            // label3
-            // 
-            label3.AutoSize = true;
-            label3.Location = new Point(6, 52);
-            label3.Name = "label3";
-            label3.Size = new Size(83, 15);
-            label3.TabIndex = 1;
-            label3.Text = "Configuration";
-            // 
-            // label2
-            // 
-            label2.AutoSize = true;
-            label2.Location = new Point(20, 23);
-            label2.Name = "label2";
-            label2.Size = new Size(69, 15);
-            label2.TabIndex = 0;
-            label2.Text = "Application";
-            // 
-            // pnlStyle
-            // 
-            pnlStyle.Controls.Add(btnEncrypt);
-            pnlStyle.Controls.Add(cboPwdStyle);
-            pnlStyle.Controls.Add(label1);
-            pnlStyle.Dock = DockStyle.Top;
-            pnlStyle.Location = new Point(3, 19);
-            pnlStyle.Name = "pnlStyle";
-            pnlStyle.Size = new Size(389, 32);
-            pnlStyle.TabIndex = 4;
-            // 
-            // btnEncrypt
-            // 
-            btnEncrypt.Location = new Point(225, 3);
-            btnEncrypt.Name = "btnEncrypt";
-            btnEncrypt.Size = new Size(75, 23);
-            btnEncrypt.TabIndex = 3;
-            btnEncrypt.Tag = "Encrypt";
-            btnEncrypt.Text = "&Encrypt";
-            btnEncrypt.UseVisualStyleBackColor = true;
-            btnEncrypt.Visible = false;
-            // 
-            // cboPwdStyle
-            // 
-            cboPwdStyle.FormattingEnabled = true;
-            cboPwdStyle.Location = new Point(97, 3);
-            cboPwdStyle.Name = "cboPwdStyle";
-            cboPwdStyle.Size = new Size(118, 23);
-            cboPwdStyle.TabIndex = 1;
-            // 
-            // label1
-            // 
-            label1.AutoSize = true;
-            label1.Location = new Point(2, 7);
-            label1.Name = "label1";
-            label1.Size = new Size(90, 15);
-            label1.TabIndex = 0;
-            label1.Text = "Password Style";
+            cboPassword.FormattingEnabled = true;
+            cboPassword.Location = new Point(3, 3);
+            cboPassword.Name = "cboPassword";
+            cboPassword.Size = new Size(139, 23);
+            cboPassword.TabIndex = 0;
             // 
             // grpDatabase
             // 
@@ -412,14 +327,11 @@ namespace ToolsUI.Config
             grpDatabase.Controls.Add(txtDbHost);
             grpDatabase.Controls.Add(label12);
             grpDatabase.Controls.Add(label10);
-            grpDatabase.Controls.Add(btnDbfShow);
             grpDatabase.Controls.Add(label11);
-            grpDatabase.Controls.Add(txtDbfPwd);
-            grpDatabase.Controls.Add(label4);
             grpDatabase.Dock = DockStyle.Right;
             grpDatabase.Location = new Point(397, 0);
             grpDatabase.Name = "grpDatabase";
-            grpDatabase.Size = new Size(329, 274);
+            grpDatabase.Size = new Size(329, 249);
             grpDatabase.TabIndex = 4;
             grpDatabase.TabStop = false;
             grpDatabase.Text = "Database";
@@ -444,7 +356,7 @@ namespace ToolsUI.Config
             // 
             // btnTest
             // 
-            btnTest.Location = new Point(154, 241);
+            btnTest.Location = new Point(154, 211);
             btnTest.Name = "btnTest";
             btnTest.Size = new Size(75, 23);
             btnTest.TabIndex = 19;
@@ -470,7 +382,7 @@ namespace ToolsUI.Config
             // 
             // txtDbInstance
             // 
-            txtDbInstance.Location = new Point(120, 205);
+            txtDbInstance.Location = new Point(120, 175);
             txtDbInstance.Name = "txtDbInstance";
             txtDbInstance.Size = new Size(142, 23);
             txtDbInstance.TabIndex = 15;
@@ -487,7 +399,7 @@ namespace ToolsUI.Config
             // label13
             // 
             label13.AutoSize = true;
-            label13.Location = new Point(46, 209);
+            label13.Location = new Point(46, 179);
             label13.Name = "label13";
             label13.Size = new Size(54, 15);
             label13.TabIndex = 14;
@@ -504,7 +416,7 @@ namespace ToolsUI.Config
             // 
             // txtDbName
             // 
-            txtDbName.Location = new Point(120, 174);
+            txtDbName.Location = new Point(120, 144);
             txtDbName.Name = "txtDbName";
             txtDbName.Size = new Size(142, 23);
             txtDbName.TabIndex = 13;
@@ -519,7 +431,7 @@ namespace ToolsUI.Config
             // label12
             // 
             label12.AutoSize = true;
-            label12.Location = new Point(49, 178);
+            label12.Location = new Point(49, 148);
             label12.Name = "label12";
             label12.Size = new Size(51, 15);
             label12.TabIndex = 12;
@@ -534,16 +446,6 @@ namespace ToolsUI.Config
             label10.TabIndex = 4;
             label10.Text = "Port";
             // 
-            // btnDbfShow
-            // 
-            btnDbfShow.Location = new Point(265, 143);
-            btnDbfShow.Name = "btnDbfShow";
-            btnDbfShow.Size = new Size(46, 23);
-            btnDbfShow.TabIndex = 11;
-            btnDbfShow.Tag = "DbfShow";
-            btnDbfShow.Text = "Show";
-            btnDbfShow.UseVisualStyleBackColor = true;
-            // 
             // label11
             // 
             label11.AutoSize = true;
@@ -553,30 +455,12 @@ namespace ToolsUI.Config
             label11.TabIndex = 6;
             label11.Text = "User";
             // 
-            // txtDbfPwd
-            // 
-            txtDbfPwd.Location = new Point(120, 143);
-            txtDbfPwd.Name = "txtDbfPwd";
-            txtDbfPwd.PasswordChar = '*';
-            txtDbfPwd.Size = new Size(142, 23);
-            txtDbfPwd.TabIndex = 10;
-            toolTip1.SetToolTip(txtDbfPwd, "Password to Connect to the Database");
-            // 
-            // label4
-            // 
-            label4.AutoSize = true;
-            label4.Location = new Point(48, 147);
-            label4.Name = "label4";
-            label4.Size = new Size(59, 15);
-            label4.TabIndex = 9;
-            label4.Text = "Password";
-            // 
             // pnlConfigureButtons
             // 
             pnlConfigureButtons.Controls.Add(btnRead);
             pnlConfigureButtons.Controls.Add(btnCancel);
             pnlConfigureButtons.Controls.Add(btnSave);
-            pnlConfigureButtons.Location = new Point(241, 279);
+            pnlConfigureButtons.Location = new Point(240, 253);
             pnlConfigureButtons.Name = "pnlConfigureButtons";
             pnlConfigureButtons.Size = new Size(260, 30);
             pnlConfigureButtons.TabIndex = 1;
@@ -754,23 +638,13 @@ namespace ToolsUI.Config
             tvDiagnostics.Size = new Size(187, 499);
             tvDiagnostics.TabIndex = 5;
             // 
-            // btnAppNew
-            // 
-            btnAppNew.Location = new Point(342, 22);
-            btnAppNew.Name = "btnAppNew";
-            btnAppNew.Size = new Size(46, 23);
-            btnAppNew.TabIndex = 8;
-            btnAppNew.Tag = "AppNew";
-            btnAppNew.Text = "New";
-            btnAppNew.UseVisualStyleBackColor = true;
-            // 
             // FrmConfig
             // 
             AcceptButton = btnSave;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             CancelButton = btnCancel;
-            ClientSize = new Size(749, 521);
+            ClientSize = new Size(749, 334);
             Controls.Add(tabConfig);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -785,10 +659,8 @@ namespace ToolsUI.Config
             grpPaths.ResumeLayout(false);
             grpPaths.PerformLayout();
             grpSecurity.ResumeLayout(false);
-            grpPasswords.ResumeLayout(false);
-            grpPasswords.PerformLayout();
-            pnlStyle.ResumeLayout(false);
-            pnlStyle.PerformLayout();
+            grpPassword.ResumeLayout(false);
+            panel1.ResumeLayout(false);
             grpDatabase.ResumeLayout(false);
             grpDatabase.PerformLayout();
             pnlConfigureButtons.ResumeLayout(false);
@@ -806,16 +678,6 @@ namespace ToolsUI.Config
         private TabControl tabConfig;
         private TabPage pgeConfigure;
         private ToolTip toolTip1;
-        private ComboBox cboPwdStyle;
-        private Label label1;
-        private Button btnEncrypt;
-        private GroupBox grpPasswords;
-        private TextBox txtCfgPwd;
-        private TextBox txtAppPwd;
-        private Label label3;
-        private Label label2;
-        private Button btnCfgShow;
-        private Button btnAppShow;
         private Panel pnlConfigureButtons;
         private Button btnCancel;
         private Button btnSave;
@@ -826,21 +688,17 @@ namespace ToolsUI.Config
         private Label label7;
         private TextBox txtDataPath;
         private Label label6;
-        private Panel pnlStyle;
         private ComboBox cboEngines;
         private Label label8;
         private TextBox txtDbHost;
         private Label label9;
         private TextBox txtDbName;
         private Label label12;
-        private TextBox txtDbfPwd;
-        private Label label4;
         private TextBox txtDbUser;
         private Label label11;
         private Label label10;
         private TextBox txtDbInstance;
         private Label label13;
-        private Button btnDbfShow;
         private Controls.NumericTextBox numDbPort;
         private Button btnTest;
         private TabPage pgeDiagnostics;
@@ -866,6 +724,9 @@ namespace ToolsUI.Config
         private TextBox txtExpected;
         private TextBox txtDescription;
         private Label lblTestName;
-        private Button btnAppNew;
+        private GroupBox grpPassword;
+        private Panel panel1;
+        private Button btnPasswordEditor;
+        private ComboBox cboPassword;
     }
 }

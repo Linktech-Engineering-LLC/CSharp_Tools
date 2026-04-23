@@ -3,8 +3,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/SettingsModel.cs
  * File: SettingsModel.cs
+ * Version: 1.0.0
  * Created: 2026-03-31
- * Modified: 2026-04-04
+ * Modified: 2026-04-22
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -20,11 +21,9 @@ namespace Tools.Config
         [BsonId]
         public int Id { get; set; } = 1;
         public int Version { get; set; } = 1;
-        public PasswordStyles PasswordStyle { get; set; } = PasswordStyles.Vault;
-        public string AppPassword { get; set; } = string.Empty;
-        public string ConfigPassword { get; set; } = string.Empty;
-        public string DbPassword { get; set; } = string.Empty;
-        public string VaultKey { get; set; } = string.Empty;
+        public PasswordMetadata AppPassword { get; set; } = new PasswordMetadata();
+        public PasswordMetadata ConfigPassword { get; set; } = new PasswordMetadata();
+        public PasswordMetadata DbPassword { get; set; } = new PasswordMetadata();
 
         public string LogPath { get; set; } = string.Empty;
         public string DataPath { get; set; } = string.Empty;

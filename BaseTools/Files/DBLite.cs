@@ -3,14 +3,16 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Files/DBLite.cs
  * File: DBLite.cs
+ * Version: 1.0.0
  * Created: 2026-03-31
- * Modified: 2026-04-02
+ * Modified: 2026-04-22
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
  */
-using System;
 using LiteDB;
+using System;
+using Tools.Enums;
 
 namespace Tools.Files
 {
@@ -30,8 +32,46 @@ namespace Tools.Files
         public T? Load<T>(string name)
             where T : class, new()
         {
-            var col = _db.GetCollection<T>(name);
-            return col.FindById(1);
+            var col = _db.GetCollection(name);
+
+            // Load raw BSON
+            var doc = col.FindById(1);
+            if (doc == null)
+                return null;
+
+            // MIGRATION: fix old string password fields before mapping to T
+            MigratePasswordFields(doc);
+
+            // Now safely map to T
+            return BsonMapper.Global.ToObject<T>(doc);
+        }
+        private void MigratePasswordFields(BsonDocument doc)
+        {
+            MigrateField(doc, "AppPassword");
+            MigrateField(doc, "ConfigPassword");
+            MigrateField(doc, "DbPassword");
+        }
+
+        private void MigrateField(BsonDocument doc, string fieldName)
+        {
+            if (!doc.ContainsKey(fieldName))
+                return;
+
+            var field = doc[fieldName];
+
+            // Old format: string
+            if (field.IsString)
+            {
+                string oldValue = field.AsString;
+
+                // Convert to new PasswordMetadata BSON structure
+                doc[fieldName] = new BsonDocument
+                {
+                    ["Location"] = PasswordLocation.Database.ToString(),
+                    ["Representation"] = PasswordRepresentation.Plaintext.ToString(),
+                    ["Password"] = oldValue
+                };
+            }
         }
         public void Rebuild()
         {

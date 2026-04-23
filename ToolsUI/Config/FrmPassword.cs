@@ -3,8 +3,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmPassword.cs
  * File: FrmPassword.cs
+ * Version: 1.0.0
  * Created: 2026-04-04
- * Modified: 2026-04-04
+ * Modified: 2026-04-22
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -31,14 +32,19 @@ namespace ToolsUI.Config
     public partial class FrmPassword : Form
     {
         #region Private Fields
-        private PasswordMetadata _initialData;
+        private readonly PasswordTarget _target;
+        private readonly PasswordMetadata _initialData;
         #endregion
         #region Constructors/Destructors
-        public FrmPassword(PasswordMetadata Initial)
+        public FrmPassword(PasswordTarget target, PasswordMetadata initial)
         {
             InitializeComponent();
             InitializeControls();
-            _initialData = Initial;
+
+            _target = target;
+            _initialData = initial ?? new PasswordMetadata();
+
+            LoadInitialMetadata();
         }
         #endregion
         #region Public Properties
@@ -55,6 +61,16 @@ namespace ToolsUI.Config
             btnOk.Click += ButtonClicked;
             cbxVault.CheckedChanged += CheckBox_CheckedChanged;
         }
+        private void LoadInitialMetadata()
+        {
+            // Example:
+            cboRepresentation.SelectedItem = _initialData.Representation;
+            txtNew.Text = _initialData.Password;
+            cbxVault.Checked = _initialData.Location == PasswordLocation.Vault;
+
+            // etc.
+        }
+
         private void TogglePassword(TextBox txt, Button btn)
         {
             bool isShowing = txt.PasswordChar == '\0';
@@ -94,21 +110,26 @@ namespace ToolsUI.Config
                         TogglePassword(txtNew, btn);
                         break;
                     case "OK":
+                        var selectedRep = (PasswordRepresentation?)cboRepresentation.SelectedItem;
+
                         PasswordData = new PasswordDialogResult
                         {
                             Accepted = true,
                             Password = txtNew.Text,
                             Metadata = new PasswordMetadata
                             {
-                                StorageLocation = cbxVault.Checked
-                                    ? StorageLocation.Vault
-                                    : StorageLocation.Database,
+                                Location = cbxVault.Checked
+                                    ? PasswordLocation.Vault
+                                    : PasswordLocation.Database,
+
                                 Representation = cbxVault.Checked
                                     ? PasswordRepresentation.Secret
-                                    : (PasswordRepresentation)cboRepresentation.SelectedItem,
-                                Value = txtNew.Text
+                                    : selectedRep ?? PasswordRepresentation.Unknown,
+
+                                Password = txtNew.Text
                             }
                         };
+
                         DialogResult = DialogResult.OK;
                         Close();
                         break;

@@ -3,8 +3,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmConfig.cs
  * File: FrmConfig.cs
+ * Version: 1.0.0
  * Created: 2026-03-31
- * Modified: 2026-04-04
+ * Modified: 2026-04-22
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -42,6 +43,7 @@ namespace ToolsUI.Config
         private TabLayoutManager _layout;
         private SettingsModel CurrentSettings;
         private readonly string _configPath;
+        private SettingsModel currentSettings {  get; set; }
         #endregion
         #region public Structs/Enums
         #endregion
@@ -52,8 +54,8 @@ namespace ToolsUI.Config
             AppName = appname;
             InitializeControls();
             InitializeTreeControls();
-            cboPwdStyle.DataSource = Enum.GetValues(typeof(PasswordStyles));
             cboEngines.DataSource = Enum.GetValues(typeof(DatabaseEngine));
+            cboPassword.DataSource = Enum.GetValues(typeof(PasswordTarget));
             _configPath = ConfigManager.GetConfigPath(AppName);
         }
         #endregion
@@ -74,7 +76,6 @@ namespace ToolsUI.Config
 
             // Enable/disable user + password
             txtDbUser.Enabled = usesNetwork;
-            txtDbfPwd.Enabled = usesNetwork;
 
             // Enable/disable schema + instance
             txtDbName.Enabled = usesNetwork;
@@ -100,47 +101,6 @@ namespace ToolsUI.Config
         }
         private void ApplySettingsToUI(SettingsModel s)
         {
-            cboPwdStyle.SelectedItem = s.PasswordStyle;
-
-            // -------------------------
-            // PASSWORD HANDLING
-            // -------------------------
-            if (s.PasswordStyle == PasswordStyles.Vault)
-            {
-                txtAppPwd.Text = string.IsNullOrWhiteSpace(s.AppPassword)
-                                 ? ""
-                                 : VaultManager.ReadSecret(s.AppPassword) ?? "";
-
-                txtCfgPwd.Text = string.IsNullOrWhiteSpace(s.ConfigPassword)
-                                 ? ""
-                                 : VaultManager.ReadSecret(s.ConfigPassword) ?? "";
-
-                txtDbfPwd.Text = string.IsNullOrWhiteSpace(s.DbPassword)
-                                 ? ""
-                                 : VaultManager.ReadSecret(s.DbPassword) ?? "";
-            }
-            else if (s.PasswordStyle == PasswordStyles.Encrypted)
-            {
-                txtAppPwd.Text = string.IsNullOrWhiteSpace(s.AppPassword)
-                                 ? ""
-                                 : EncryptionHelper.Decrypt(s.AppPassword);
-
-                txtCfgPwd.Text = string.IsNullOrWhiteSpace(s.ConfigPassword)
-                                 ? ""
-                                 : EncryptionHelper.Decrypt(s.ConfigPassword);
-
-                txtDbfPwd.Text = string.IsNullOrWhiteSpace(s.DbPassword)
-                                 ? ""
-                                 : EncryptionHelper.Decrypt(s.DbPassword);
-            }
-            else
-            {
-                // PlainText mode
-                txtAppPwd.Text = s.AppPassword;
-                txtCfgPwd.Text = s.ConfigPassword;
-                txtDbfPwd.Text = s.DbPassword;
-            }
-
             // -------------------------
             // PATHS
             // -------------------------
@@ -173,73 +133,21 @@ namespace ToolsUI.Config
         }
         private SettingsModel CollectSettingsFromUI()
         {
-            var engine = (DatabaseEngine)cboEngines.SelectedItem;
-            string appName = AppName;
+            // We assume `currentSettings` is the in-memory SettingsModel
+            // that already contains updated PasswordMetadata objects
+            // from the password dialog.
 
-            string appPasswordKey = $"{appName}.Application";
-            string configPasswordKey = $"{appName}.Configuration";
-            string dbPasswordKey = $"{appName}.{engine}";
+            currentSettings.LogPath = txtLogPath.Text;
+            currentSettings.DataPath = txtDataPath.Text;
+            currentSettings.TempPath = txtTempPath.Text;
 
-            var style = (PasswordStyles)cboPwdStyle.SelectedItem;
+            currentSettings.DbHost = txtDbHost.Text;
+            currentSettings.DbPort = numDbPort.Enabled ? numDbPort.IntValue : 0;
+            currentSettings.DbName = txtDbName.Text;
+            currentSettings.DbUser = txtDbUser.Text;
+            currentSettings.DbInstance = txtDbInstance.Text;
 
-            string appPasswordToSave;
-            string configPasswordToSave;
-            string dbPasswordToSave;
-
-            // -------------------------
-            // VAULT MODE
-            // -------------------------
-            if (style == PasswordStyles.Vault)
-            {
-                appPasswordToSave = SavePasswordToVault(appPasswordKey, txtAppPwd.Text);
-                configPasswordToSave = SavePasswordToVault(configPasswordKey, txtCfgPwd.Text);
-                dbPasswordToSave = SavePasswordToVault(dbPasswordKey, txtDbfPwd.Text);
-            }
-            // -------------------------
-            // ENCRYPTED MODE
-            // -------------------------
-            else if (style == PasswordStyles.Encrypted)
-            {
-                appPasswordToSave = string.IsNullOrWhiteSpace(txtAppPwd.Text)
-                                       ? ""
-                                       : EncryptionHelper.Encrypt(txtAppPwd.Text);
-
-                configPasswordToSave = string.IsNullOrWhiteSpace(txtCfgPwd.Text)
-                                       ? ""
-                                       : EncryptionHelper.Encrypt(txtCfgPwd.Text);
-
-                dbPasswordToSave = string.IsNullOrWhiteSpace(txtDbfPwd.Text)
-                                       ? ""
-                                       : EncryptionHelper.Encrypt(txtDbfPwd.Text);
-            }
-            // -------------------------
-            // PLAINTEXT MODE
-            // -------------------------
-            else
-            {
-                appPasswordToSave = txtAppPwd.Text;
-                configPasswordToSave = txtCfgPwd.Text;
-                dbPasswordToSave = txtDbfPwd.Text;
-            }
-
-            return new SettingsModel
-            {
-                PasswordStyle = style,
-
-                AppPassword = appPasswordToSave,
-                ConfigPassword = configPasswordToSave,
-                DbPassword = dbPasswordToSave,
-
-                LogPath = txtLogPath.Text,
-                DataPath = txtDataPath.Text,
-                TempPath = txtTempPath.Text,
-
-                DbHost = txtDbHost.Text,
-                DbPort = numDbPort.Enabled ? numDbPort.IntValue : 0,
-                DbName = txtDbName.Text,
-                DbUser = txtDbUser.Text,
-                DbInstance = txtDbInstance.Text
-            };
+            return currentSettings;
         }
         private void DisplayResult(DiagnosticResult result)
         {
@@ -253,24 +161,29 @@ namespace ToolsUI.Config
             if (result.ExtraItems.Count > 0)
                 lstDiagnosticsResults.Items.Add($"   Extra: {string.Join(", ", result.ExtraItems)}");
         }
+        private PasswordMetadata GetPasswordMetadata(PasswordTarget target)
+        {
+            return target switch
+            {
+                PasswordTarget.Application => currentSettings.AppPassword ??= new PasswordMetadata(),
+                PasswordTarget.Configuration => currentSettings.ConfigPassword ??= new PasswordMetadata(),
+                PasswordTarget.Database => currentSettings.DbPassword ??= new PasswordMetadata(),
+                _ => new PasswordMetadata()
+            };
+        }
         private void InitializeControls()
         {
-            btnAppNew.Click += ButtonClicked;
-            btnAppShow.Click += ButtonClicked;
-            btnCfgShow.Click += ButtonClicked;
-            btnDbfShow.Click += ButtonClicked;
-            btnEncrypt.Click += ButtonClicked;
             btnSave.Click += ButtonClicked;
             btnCancel.Click += ButtonClicked;
             btnRead.Click += ButtonClicked;
             btnTest.Click += ButtonClicked;
+            btnPasswordEditor.Click += ButtonClicked;
             btnBrowseLogPath.Click += (s, e) => BrowseForFolder(txtLogPath);
             btnBrowseDataPath.Click += (s, e) => BrowseForFolder(txtDataPath);
             btnBrowseTempPath.Click += (s, e) => BrowseForFolder(txtTempPath);
             Load += FormLoad;
             lstDiagnosticsResults.DrawItem += LstSchemaResults_DrawItem;
             cboEngines.SelectedIndexChanged += CboEngines_SelectedIndexChanged;
-            cboPwdStyle.SelectedIndexChanged += cboPwdStyle_SelectedIndexChanged;
             tabConfig.SelectedIndexChanged += TabConfig_SelectedIndexChanged;
             numDbPort.Leave += NumDbPort_Leave;
         }
@@ -279,11 +192,6 @@ namespace ToolsUI.Config
             tvDiagnostics.AfterSelect += TvDiagnostics_AfterSelect;
             btnRunTest.Click += TvDiagnosticButton_Click;
             btnRunGroup.Click += TvDiagnosticButton_Click;
-        }
-        private void InitializePasswordStyleUI()
-        {
-            // Force the SelectedIndexChanged logic to run
-            cboPwdStyle_SelectedIndexChanged(cboPwdStyle, EventArgs.Empty);
         }
         private void LstSchemaResults_DrawItem(object sender, DrawItemEventArgs e)
         {
@@ -403,13 +311,11 @@ namespace ToolsUI.Config
             var result = DiagnosticsTests.Test_ConfigFileExists(_configPath);
             DisplayResult(result);
         }
-
         private void RunTestConfigFileReadable()
         {
             var result = DiagnosticsTests.Test_ConfigFileReadable(_configPath);
             DisplayResult(result);
         }
-
         private void RunTestConfigFileValidLiteDB()
         {
             var result = DiagnosticsTests.Test_ConfigFileValidLiteDB(_configPath);
@@ -420,6 +326,24 @@ namespace ToolsUI.Config
             var result = DiagnosticsService.TestRequiredFields(_configPath);
             DisplayResult(result);
         }
+        private void SavePasswordMetadata(PasswordTarget target, PasswordMetadata meta)
+        {
+            switch (target)
+            {
+                case PasswordTarget.Application:
+                    currentSettings.AppPassword = meta;
+                    break;
+
+                case PasswordTarget.Configuration:
+                    currentSettings.ConfigPassword = meta;
+                    break;
+
+                case PasswordTarget.Database:
+                    currentSettings.DbPassword = meta;
+                    break;
+            }
+        }
+
         private void ShowDiagnosticResultOnButton(DiagnosticResult result, Button button)
         {
             string baseText = button.Tag?.ToString() ?? button.Text;
@@ -471,7 +395,6 @@ namespace ToolsUI.Config
                 Host = txtDbHost.Text,
                 Port = numDbPort.IntValue,
                 User = txtDbUser.Text,
-                Password = txtDbfPwd.Text,
                 Schema = txtDbName.Text,
                 Instance = txtDbInstance.Text
             };
@@ -514,28 +437,33 @@ namespace ToolsUI.Config
             {
                 switch (Tags)
                 {
-                    case "AppNew":
-                        FrmPassword frm = new(null);
-                        DialogResult rc = frm.ShowDialog(this);
-                        PasswordDialogResult pmd = frm.PasswordData;
-                        txtAppPwd.Text = string.Empty;
-                        break;
-                    case "AppShow":
-                        TogglePassword(txtAppPwd, btn);
-                        break;
                     case "Cancel":
                         DialogResult = DialogResult.Cancel;
                         Close();
                         break;
-                    case "CfgShow":
-                        TogglePassword(txtCfgPwd, btn);
-                        break;
-                    case "DbfShow":
-                        TogglePassword(txtDbfPwd, btn);
-                        break;
                     case "Encrypt":
                         MessageBox.Show("Encryption settings would be displayed here.", "Encryption", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         break;
+                    case "PasswordEditor":
+                        {
+                            PasswordTarget target = (PasswordTarget)cboPassword.SelectedItem!;
+
+                            // 1. Retrieve the correct metadata from currentSettings
+                            var meta = GetPasswordMetadata(target);
+
+                            // 2. Launch the password editor dialog
+                            using FrmPassword dlg = new(target, meta);
+
+                            dlg.ShowDialog();
+
+                            // 3. Check the dialog's custom result object, not DialogResult.OK
+                            if (dlg.PasswordData?.Accepted == true)
+                            {
+                                SavePasswordMetadata(target, dlg.PasswordData.Metadata);
+                            }
+
+                            break;
+                        }
                     case "Read":
                         // Here you would read the existing settings from the DBLite file and populate the UI
                         SettingsModel reader = ConfigManager.Load(AppName);
@@ -556,39 +484,6 @@ namespace ToolsUI.Config
                 }
             }
         }
-        private void cboPwdStyle_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (cboPwdStyle.SelectedItem is PasswordStyles style)
-            {
-                // Default: hide everything
-                grpPasswords.Visible = false;
-                btnEncrypt.Visible = false;
-
-                switch (style)
-                {
-                    case PasswordStyles.Vault:
-                        grpPasswords.Visible = true;
-                        btnEncrypt.Visible = false;
-                        break;
-
-                    case PasswordStyles.Encrypted:
-                        // Show all password fields + show/hide buttons + Encrypt
-                        grpPasswords.Visible = true;
-                        btnEncrypt.Visible = true;
-                        break;
-
-                    case PasswordStyles.PlainText:
-                        // Show all password fields + show/hide buttons, but no Encrypt
-                        grpPasswords.Visible = true;
-                        btnEncrypt.Visible = false;
-                        break;
-
-                    case PasswordStyles.Prompt:
-                        // No passwords shown; runtime prompt only
-                        break;
-                }
-            }
-        }
         private void CboEngines_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cboEngines.SelectedItem is DatabaseEngine engine)
@@ -599,10 +494,9 @@ namespace ToolsUI.Config
         private void FormLoad(object sender, EventArgs e)
         {
             // Load settings
-            SettingsModel settings = ConfigManager.Load(AppName);
-            ApplySettingsToUI(settings);
+            currentSettings = ConfigManager.Load(AppName);
+            ApplySettingsToUI(currentSettings);
             ApplyEngineRules();
-            InitializePasswordStyleUI();
 
             // Build layout manager
             _layout = new TabLayoutManager(
