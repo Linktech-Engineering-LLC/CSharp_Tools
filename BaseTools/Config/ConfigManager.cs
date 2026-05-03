@@ -3,8 +3,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/ConfigManager.cs
  * File: ConfigManager.cs
+ * Version: 1.0.0
  * Created: 2026-03-31
- * Modified: 2026-04-02
+ * Modified: 2026-05-03
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -26,6 +27,7 @@ namespace Tools.Config
         /// Builds the deterministic DBLite configuration path:
         /// %APPDATA%\Linktech\<AppName>.dblite
         /// </summary>
+
         public static string GetConfigPath(string appName)
         {
             string basePath = Path.Combine(
@@ -48,10 +50,9 @@ namespace Tools.Config
 
             using DBLite db = new(path);
 
-            // Load the settings row (or create defaults)
-            SettingsModel settings = db.Load<SettingsModel>("Settings");
+            SettingsModel settings = db.Load<SettingsModel>("Settings") ?? new SettingsModel();
 
-            return settings ?? new SettingsModel();
+            return settings;
         }
 
         /// <summary>
@@ -67,11 +68,18 @@ namespace Tools.Config
             // Ensure schema exists
             DBLiteSchema.Ensure(db);
 
-            // Set schema version on the model
-            settings.Version = DBLiteSchema.SchemaVersion;
+            // Load existing document (raw)
+            BsonDocument existing = db.Load<BsonDocument>("Settings") ?? new BsonDocument();
 
-            // Save the typed model
-            db.Save("Settings", settings);
+            // Convert UI model to a document
+            BsonDocument updated = db.ToDocument(settings);
+
+            // Merge UI fields into existing document
+            foreach (KeyValuePair<string, BsonValue> kv in updated)
+                existing[kv.Key] = kv.Value;
+
+            // Save merged document
+            db.Save("Settings", existing);
         }
     }
 }

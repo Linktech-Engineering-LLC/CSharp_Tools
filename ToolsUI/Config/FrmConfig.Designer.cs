@@ -5,7 +5,7 @@
  * File: FrmConfig.Designer.cs
  * Version: 1.0.0
  * Created: None
- * Modified: 2026-04-22
+ * Modified: 2026-05-03
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -47,20 +47,22 @@ namespace ToolsUI.Config
             pnlConfigureGroups = new Panel();
             pnlCfgLeft = new Panel();
             grpPaths = new GroupBox();
-            btnBrowseTempPath = new Button();
-            btnBrowseDataPath = new Button();
-            btnBrowseLogPath = new Button();
-            txtTempPath = new TextBox();
-            label7 = new Label();
+            cboPathType = new ComboBox();
+            label2 = new Label();
+            cboPathName = new ComboBox();
+            label1 = new Label();
+            btnBrowsePath = new Button();
             label5 = new Label();
-            txtDataPath = new TextBox();
-            txtLogPath = new TextBox();
-            label6 = new Label();
+            txtPath = new TextBox();
             grpSecurity = new GroupBox();
             grpPassword = new GroupBox();
             panel1 = new Panel();
             btnPasswordEditor = new Button();
             cboPassword = new ComboBox();
+            pnlConfigureButtons = new Panel();
+            btnRead = new Button();
+            btnCancel = new Button();
+            btnSave = new Button();
             grpDatabase = new GroupBox();
             numDbPort = new ToolsUI.Controls.NumericTextBox();
             btnTest = new Button();
@@ -70,15 +72,11 @@ namespace ToolsUI.Config
             cboEngines = new ComboBox();
             label13 = new Label();
             label9 = new Label();
-            txtDbName = new TextBox();
+            txtDbSchema = new TextBox();
             txtDbHost = new TextBox();
             label12 = new Label();
             label10 = new Label();
             label11 = new Label();
-            pnlConfigureButtons = new Panel();
-            btnRead = new Button();
-            btnCancel = new Button();
-            btnSave = new Button();
             pgeDiagnostics = new TabPage();
             pnlDiagnostics = new Panel();
             pnlDiagnosticsRight = new Panel();
@@ -103,8 +101,8 @@ namespace ToolsUI.Config
             grpSecurity.SuspendLayout();
             grpPassword.SuspendLayout();
             panel1.SuspendLayout();
-            grpDatabase.SuspendLayout();
             pnlConfigureButtons.SuspendLayout();
+            grpDatabase.SuspendLayout();
             pgeDiagnostics.SuspendLayout();
             pnlDiagnostics.SuspendLayout();
             pnlDiagnosticsRight.SuspendLayout();
@@ -136,20 +134,20 @@ namespace ToolsUI.Config
             // pnlConfigure
             // 
             pnlConfigure.Controls.Add(pnlConfigureGroups);
-            pnlConfigure.Controls.Add(pnlConfigureButtons);
             pnlConfigure.Dock = DockStyle.Top;
             pnlConfigure.Location = new Point(3, 3);
             pnlConfigure.Name = "pnlConfigure";
-            pnlConfigure.Size = new Size(736, 292);
+            pnlConfigure.Size = new Size(736, 350);
             pnlConfigure.TabIndex = 3;
             // 
             // pnlConfigureGroups
             // 
             pnlConfigureGroups.Controls.Add(pnlCfgLeft);
+            pnlConfigureGroups.Controls.Add(pnlConfigureButtons);
             pnlConfigureGroups.Controls.Add(grpDatabase);
             pnlConfigureGroups.Location = new Point(3, 3);
             pnlConfigureGroups.Name = "pnlConfigureGroups";
-            pnlConfigureGroups.Size = new Size(726, 249);
+            pnlConfigureGroups.Size = new Size(726, 247);
             pnlConfigureGroups.TabIndex = 2;
             // 
             // pnlCfgLeft
@@ -158,111 +156,90 @@ namespace ToolsUI.Config
             pnlCfgLeft.Controls.Add(grpSecurity);
             pnlCfgLeft.Location = new Point(0, 0);
             pnlCfgLeft.Name = "pnlCfgLeft";
-            pnlCfgLeft.Size = new Size(395, 234);
+            pnlCfgLeft.Size = new Size(395, 167);
             pnlCfgLeft.TabIndex = 4;
             // 
             // grpPaths
             // 
-            grpPaths.Controls.Add(btnBrowseTempPath);
-            grpPaths.Controls.Add(btnBrowseDataPath);
-            grpPaths.Controls.Add(btnBrowseLogPath);
-            grpPaths.Controls.Add(txtTempPath);
-            grpPaths.Controls.Add(label7);
+            grpPaths.Controls.Add(cboPathType);
+            grpPaths.Controls.Add(label2);
+            grpPaths.Controls.Add(cboPathName);
+            grpPaths.Controls.Add(label1);
+            grpPaths.Controls.Add(btnBrowsePath);
             grpPaths.Controls.Add(label5);
-            grpPaths.Controls.Add(txtDataPath);
-            grpPaths.Controls.Add(txtLogPath);
-            grpPaths.Controls.Add(label6);
+            grpPaths.Controls.Add(txtPath);
             grpPaths.Dock = DockStyle.Top;
             grpPaths.Location = new Point(0, 73);
             grpPaths.Name = "grpPaths";
-            grpPaths.Size = new Size(395, 127);
+            grpPaths.Size = new Size(395, 94);
             grpPaths.TabIndex = 3;
             grpPaths.TabStop = false;
             grpPaths.Text = "Paths";
             // 
-            // btnBrowseTempPath
+            // cboPathType
             // 
-            btnBrowseTempPath.Location = new Point(262, 73);
-            btnBrowseTempPath.Name = "btnBrowseTempPath";
-            btnBrowseTempPath.Size = new Size(75, 23);
-            btnBrowseTempPath.TabIndex = 8;
-            btnBrowseTempPath.Tag = "TempSelector";
-            btnBrowseTempPath.Text = "Browse";
-            toolTip1.SetToolTip(btnBrowseTempPath, "Browse for the Temporary Folder");
-            btnBrowseTempPath.UseVisualStyleBackColor = true;
+            cboPathType.FormattingEnabled = true;
+            cboPathType.Location = new Point(234, 15);
+            cboPathType.Name = "cboPathType";
+            cboPathType.Size = new Size(139, 23);
+            cboPathType.TabIndex = 12;
+            cboPathType.Tag = "PathType";
             // 
-            // btnBrowseDataPath
+            // label2
             // 
-            btnBrowseDataPath.Location = new Point(262, 44);
-            btnBrowseDataPath.Name = "btnBrowseDataPath";
-            btnBrowseDataPath.Size = new Size(75, 23);
-            btnBrowseDataPath.TabIndex = 7;
-            btnBrowseDataPath.Tag = "DataSelector";
-            btnBrowseDataPath.Text = "Browse";
-            toolTip1.SetToolTip(btnBrowseDataPath, "Browse for the Data Folder");
-            btnBrowseDataPath.UseVisualStyleBackColor = true;
+            label2.AutoSize = true;
+            label2.Location = new Point(195, 19);
+            label2.Name = "label2";
+            label2.Size = new Size(33, 15);
+            label2.TabIndex = 11;
+            label2.Text = "Type";
             // 
-            // btnBrowseLogPath
+            // cboPathName
             // 
-            btnBrowseLogPath.Location = new Point(262, 15);
-            btnBrowseLogPath.Name = "btnBrowseLogPath";
-            btnBrowseLogPath.Size = new Size(75, 23);
-            btnBrowseLogPath.TabIndex = 6;
-            btnBrowseLogPath.Tag = "LogSelector";
-            btnBrowseLogPath.Text = "Browse";
-            toolTip1.SetToolTip(btnBrowseLogPath, "Browse for the Logging Folder");
-            btnBrowseLogPath.UseVisualStyleBackColor = true;
+            cboPathName.FormattingEnabled = true;
+            cboPathName.Location = new Point(50, 15);
+            cboPathName.Name = "cboPathName";
+            cboPathName.Size = new Size(139, 23);
+            cboPathName.TabIndex = 10;
+            cboPathName.Tag = "PathName";
             // 
-            // txtTempPath
+            // label1
             // 
-            txtTempPath.Location = new Point(85, 73);
-            txtTempPath.Name = "txtTempPath";
-            txtTempPath.Size = new Size(171, 23);
-            txtTempPath.TabIndex = 5;
-            toolTip1.SetToolTip(txtTempPath, "Directory which contains the Temporary Files");
+            label1.AutoSize = true;
+            label1.Location = new Point(6, 19);
+            label1.Name = "label1";
+            label1.Size = new Size(40, 15);
+            label1.TabIndex = 9;
+            label1.Text = "Name";
             // 
-            // label7
+            // btnBrowsePath
             // 
-            label7.AutoSize = true;
-            label7.Location = new Point(13, 77);
-            label7.Name = "label7";
-            label7.Size = new Size(66, 15);
-            label7.TabIndex = 4;
-            label7.Text = "Temp Path";
+            btnBrowsePath.Location = new Point(262, 44);
+            btnBrowsePath.Name = "btnBrowsePath";
+            btnBrowsePath.Size = new Size(75, 23);
+            btnBrowsePath.TabIndex = 6;
+            btnBrowsePath.Tag = "LogSelector";
+            btnBrowsePath.Text = "Browse";
+            toolTip1.SetToolTip(btnBrowsePath, "Browse for the Logging Folder");
+            btnBrowsePath.UseVisualStyleBackColor = true;
             // 
             // label5
             // 
             label5.AutoSize = true;
-            label5.Location = new Point(24, 19);
+            label5.Location = new Point(41, 48);
             label5.Name = "label5";
-            label5.Size = new Size(55, 15);
+            label5.Size = new Size(32, 15);
             label5.TabIndex = 0;
-            label5.Text = "Log Path";
+            label5.Text = "Path";
             // 
-            // txtDataPath
+            // txtPath
             // 
-            txtDataPath.Location = new Point(85, 44);
-            txtDataPath.Name = "txtDataPath";
-            txtDataPath.Size = new Size(171, 23);
-            txtDataPath.TabIndex = 3;
-            toolTip1.SetToolTip(txtDataPath, "Directory which Contains the Data Files");
-            // 
-            // txtLogPath
-            // 
-            txtLogPath.Location = new Point(85, 15);
-            txtLogPath.Name = "txtLogPath";
-            txtLogPath.Size = new Size(171, 23);
-            txtLogPath.TabIndex = 1;
-            toolTip1.SetToolTip(txtLogPath, "Directory which contains the logs");
-            // 
-            // label6
-            // 
-            label6.AutoSize = true;
-            label6.Location = new Point(18, 48);
-            label6.Name = "label6";
-            label6.Size = new Size(61, 15);
-            label6.TabIndex = 2;
-            label6.Text = "Data Path";
+            txtPath.Location = new Point(85, 44);
+            txtPath.Name = "txtPath";
+            txtPath.Size = new Size(171, 23);
+            txtPath.TabIndex = 1;
+            txtPath.Tag = "Path";
+            toolTip1.SetToolTip(txtPath, "Directory which contains the logs");
             // 
             // grpSecurity
             // 
@@ -312,155 +289,14 @@ namespace ToolsUI.Config
             cboPassword.Name = "cboPassword";
             cboPassword.Size = new Size(139, 23);
             cboPassword.TabIndex = 0;
-            // 
-            // grpDatabase
-            // 
-            grpDatabase.Controls.Add(numDbPort);
-            grpDatabase.Controls.Add(btnTest);
-            grpDatabase.Controls.Add(txtDbUser);
-            grpDatabase.Controls.Add(label8);
-            grpDatabase.Controls.Add(txtDbInstance);
-            grpDatabase.Controls.Add(cboEngines);
-            grpDatabase.Controls.Add(label13);
-            grpDatabase.Controls.Add(label9);
-            grpDatabase.Controls.Add(txtDbName);
-            grpDatabase.Controls.Add(txtDbHost);
-            grpDatabase.Controls.Add(label12);
-            grpDatabase.Controls.Add(label10);
-            grpDatabase.Controls.Add(label11);
-            grpDatabase.Dock = DockStyle.Right;
-            grpDatabase.Location = new Point(397, 0);
-            grpDatabase.Name = "grpDatabase";
-            grpDatabase.Size = new Size(329, 249);
-            grpDatabase.TabIndex = 4;
-            grpDatabase.TabStop = false;
-            grpDatabase.Text = "Database";
-            // 
-            // numDbPort
-            // 
-            numDbPort.AllowDecimal = false;
-            numDbPort.AllowNegative = false;
-            numDbPort.Borderless = false;
-            numDbPort.BorderStyle = BorderStyle.FixedSingle;
-            numDbPort.DarkMode = false;
-            numDbPort.IntValue = 0;
-            numDbPort.Location = new Point(120, 81);
-            numDbPort.Maximum = new decimal(new int[] { 65553, 0, 0, 0 });
-            numDbPort.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
-            numDbPort.Name = "numDbPort";
-            numDbPort.Placeholder = "";
-            numDbPort.Size = new Size(53, 23);
-            numDbPort.TabIndex = 20;
-            numDbPort.Text = "0";
-            numDbPort.Value = new decimal(new int[] { 0, 0, 0, 0 });
-            // 
-            // btnTest
-            // 
-            btnTest.Location = new Point(154, 211);
-            btnTest.Name = "btnTest";
-            btnTest.Size = new Size(75, 23);
-            btnTest.TabIndex = 19;
-            btnTest.Tag = "Test";
-            btnTest.Text = "&Test";
-            btnTest.UseVisualStyleBackColor = true;
-            // 
-            // txtDbUser
-            // 
-            txtDbUser.Location = new Point(120, 112);
-            txtDbUser.Name = "txtDbUser";
-            txtDbUser.Size = new Size(142, 23);
-            txtDbUser.TabIndex = 7;
-            // 
-            // label8
-            // 
-            label8.AutoSize = true;
-            label8.Location = new Point(9, 25);
-            label8.Name = "label8";
-            label8.Size = new Size(98, 15);
-            label8.TabIndex = 0;
-            label8.Text = "Database Engine";
-            // 
-            // txtDbInstance
-            // 
-            txtDbInstance.Location = new Point(120, 175);
-            txtDbInstance.Name = "txtDbInstance";
-            txtDbInstance.Size = new Size(142, 23);
-            txtDbInstance.TabIndex = 15;
-            // 
-            // cboEngines
-            // 
-            cboEngines.FormattingEnabled = true;
-            cboEngines.Location = new Point(120, 19);
-            cboEngines.Name = "cboEngines";
-            cboEngines.Size = new Size(142, 23);
-            cboEngines.TabIndex = 1;
-            toolTip1.SetToolTip(cboEngines, "Selects the Active Database Engine");
-            // 
-            // label13
-            // 
-            label13.AutoSize = true;
-            label13.Location = new Point(46, 179);
-            label13.Name = "label13";
-            label13.Size = new Size(54, 15);
-            label13.TabIndex = 14;
-            label13.Text = "Instance";
-            // 
-            // label9
-            // 
-            label9.AutoSize = true;
-            label9.Location = new Point(74, 54);
-            label9.Name = "label9";
-            label9.Size = new Size(33, 15);
-            label9.TabIndex = 2;
-            label9.Text = "Host";
-            // 
-            // txtDbName
-            // 
-            txtDbName.Location = new Point(120, 144);
-            txtDbName.Name = "txtDbName";
-            txtDbName.Size = new Size(142, 23);
-            txtDbName.TabIndex = 13;
-            // 
-            // txtDbHost
-            // 
-            txtDbHost.Location = new Point(120, 50);
-            txtDbHost.Name = "txtDbHost";
-            txtDbHost.Size = new Size(142, 23);
-            txtDbHost.TabIndex = 3;
-            // 
-            // label12
-            // 
-            label12.AutoSize = true;
-            label12.Location = new Point(49, 148);
-            label12.Name = "label12";
-            label12.Size = new Size(51, 15);
-            label12.TabIndex = 12;
-            label12.Text = "Schema";
-            // 
-            // label10
-            // 
-            label10.AutoSize = true;
-            label10.Location = new Point(76, 85);
-            label10.Name = "label10";
-            label10.Size = new Size(31, 15);
-            label10.TabIndex = 4;
-            label10.Text = "Port";
-            // 
-            // label11
-            // 
-            label11.AutoSize = true;
-            label11.Location = new Point(74, 116);
-            label11.Name = "label11";
-            label11.Size = new Size(33, 15);
-            label11.TabIndex = 6;
-            label11.Text = "User";
+            cboPassword.Tag = "Password";
             // 
             // pnlConfigureButtons
             // 
             pnlConfigureButtons.Controls.Add(btnRead);
             pnlConfigureButtons.Controls.Add(btnCancel);
             pnlConfigureButtons.Controls.Add(btnSave);
-            pnlConfigureButtons.Location = new Point(240, 253);
+            pnlConfigureButtons.Location = new Point(67, 179);
             pnlConfigureButtons.Name = "pnlConfigureButtons";
             pnlConfigureButtons.Size = new Size(260, 30);
             pnlConfigureButtons.TabIndex = 1;
@@ -497,6 +333,154 @@ namespace ToolsUI.Config
             btnSave.Text = "&Save";
             toolTip1.SetToolTip(btnSave, "Saves the configuration and closes the form");
             btnSave.UseVisualStyleBackColor = true;
+            // 
+            // grpDatabase
+            // 
+            grpDatabase.Controls.Add(numDbPort);
+            grpDatabase.Controls.Add(btnTest);
+            grpDatabase.Controls.Add(txtDbUser);
+            grpDatabase.Controls.Add(label8);
+            grpDatabase.Controls.Add(txtDbInstance);
+            grpDatabase.Controls.Add(cboEngines);
+            grpDatabase.Controls.Add(label13);
+            grpDatabase.Controls.Add(label9);
+            grpDatabase.Controls.Add(txtDbSchema);
+            grpDatabase.Controls.Add(txtDbHost);
+            grpDatabase.Controls.Add(label12);
+            grpDatabase.Controls.Add(label10);
+            grpDatabase.Controls.Add(label11);
+            grpDatabase.Dock = DockStyle.Right;
+            grpDatabase.Location = new Point(397, 0);
+            grpDatabase.Name = "grpDatabase";
+            grpDatabase.Size = new Size(329, 247);
+            grpDatabase.TabIndex = 4;
+            grpDatabase.TabStop = false;
+            grpDatabase.Text = "Database";
+            // 
+            // numDbPort
+            // 
+            numDbPort.AllowDecimal = false;
+            numDbPort.AllowNegative = false;
+            numDbPort.Borderless = false;
+            numDbPort.BorderStyle = BorderStyle.FixedSingle;
+            numDbPort.DarkMode = false;
+            numDbPort.IntValue = 0;
+            numDbPort.Location = new Point(120, 81);
+            numDbPort.Maximum = new decimal(new int[] { 65553, 0, 0, 0 });
+            numDbPort.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
+            numDbPort.Name = "numDbPort";
+            numDbPort.Placeholder = "";
+            numDbPort.Size = new Size(53, 23);
+            numDbPort.TabIndex = 20;
+            numDbPort.Tag = "Port";
+            numDbPort.Text = "0";
+            numDbPort.Value = new decimal(new int[] { 0, 0, 0, 0 });
+            // 
+            // btnTest
+            // 
+            btnTest.Location = new Point(154, 211);
+            btnTest.Name = "btnTest";
+            btnTest.Size = new Size(75, 23);
+            btnTest.TabIndex = 19;
+            btnTest.Tag = "Test";
+            btnTest.Text = "&Test";
+            btnTest.UseVisualStyleBackColor = true;
+            // 
+            // txtDbUser
+            // 
+            txtDbUser.Location = new Point(120, 112);
+            txtDbUser.Name = "txtDbUser";
+            txtDbUser.Size = new Size(142, 23);
+            txtDbUser.TabIndex = 7;
+            txtDbUser.Tag = "User";
+            // 
+            // label8
+            // 
+            label8.AutoSize = true;
+            label8.Location = new Point(9, 25);
+            label8.Name = "label8";
+            label8.Size = new Size(98, 15);
+            label8.TabIndex = 0;
+            label8.Text = "Database Engine";
+            // 
+            // txtDbInstance
+            // 
+            txtDbInstance.Location = new Point(120, 175);
+            txtDbInstance.Name = "txtDbInstance";
+            txtDbInstance.Size = new Size(142, 23);
+            txtDbInstance.TabIndex = 15;
+            txtDbInstance.Tag = "Instance";
+            // 
+            // cboEngines
+            // 
+            cboEngines.FormattingEnabled = true;
+            cboEngines.Location = new Point(120, 19);
+            cboEngines.Name = "cboEngines";
+            cboEngines.Size = new Size(142, 23);
+            cboEngines.TabIndex = 1;
+            cboEngines.Tag = "Engines";
+            toolTip1.SetToolTip(cboEngines, "Selects the Active Database Engine");
+            // 
+            // label13
+            // 
+            label13.AutoSize = true;
+            label13.Location = new Point(46, 179);
+            label13.Name = "label13";
+            label13.Size = new Size(54, 15);
+            label13.TabIndex = 14;
+            label13.Text = "Instance";
+            // 
+            // label9
+            // 
+            label9.AutoSize = true;
+            label9.Location = new Point(74, 54);
+            label9.Name = "label9";
+            label9.Size = new Size(33, 15);
+            label9.TabIndex = 2;
+            label9.Text = "Host";
+            // 
+            // txtDbSchema
+            // 
+            txtDbSchema.Location = new Point(120, 144);
+            txtDbSchema.Name = "txtDbSchema";
+            txtDbSchema.Size = new Size(142, 23);
+            txtDbSchema.TabIndex = 13;
+            txtDbSchema.Tag = "Schema";
+            // 
+            // txtDbHost
+            // 
+            txtDbHost.Location = new Point(120, 50);
+            txtDbHost.Name = "txtDbHost";
+            txtDbHost.Size = new Size(142, 23);
+            txtDbHost.TabIndex = 3;
+            txtDbHost.Tag = "Host";
+            // 
+            // label12
+            // 
+            label12.AutoSize = true;
+            label12.Location = new Point(49, 148);
+            label12.Name = "label12";
+            label12.Size = new Size(51, 15);
+            label12.TabIndex = 12;
+            label12.Text = "Schema";
+            // 
+            // label10
+            // 
+            label10.AutoSize = true;
+            label10.Location = new Point(76, 85);
+            label10.Name = "label10";
+            label10.Size = new Size(31, 15);
+            label10.TabIndex = 4;
+            label10.Text = "Port";
+            // 
+            // label11
+            // 
+            label11.AutoSize = true;
+            label11.Location = new Point(74, 116);
+            label11.Name = "label11";
+            label11.Size = new Size(33, 15);
+            label11.TabIndex = 6;
+            label11.Text = "User";
             // 
             // pgeDiagnostics
             // 
@@ -644,7 +628,7 @@ namespace ToolsUI.Config
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             CancelButton = btnCancel;
-            ClientSize = new Size(749, 334);
+            ClientSize = new Size(749, 298);
             Controls.Add(tabConfig);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -661,9 +645,9 @@ namespace ToolsUI.Config
             grpSecurity.ResumeLayout(false);
             grpPassword.ResumeLayout(false);
             panel1.ResumeLayout(false);
+            pnlConfigureButtons.ResumeLayout(false);
             grpDatabase.ResumeLayout(false);
             grpDatabase.PerformLayout();
-            pnlConfigureButtons.ResumeLayout(false);
             pgeDiagnostics.ResumeLayout(false);
             pnlDiagnostics.ResumeLayout(false);
             pnlDiagnosticsRight.ResumeLayout(false);
@@ -683,16 +667,12 @@ namespace ToolsUI.Config
         private Button btnSave;
         private Button btnRead;
         private Label label5;
-        private TextBox txtLogPath;
-        private TextBox txtTempPath;
-        private Label label7;
-        private TextBox txtDataPath;
-        private Label label6;
+        private TextBox txtPath;
         private ComboBox cboEngines;
         private Label label8;
         private TextBox txtDbHost;
         private Label label9;
-        private TextBox txtDbName;
+        private TextBox txtDbSchema;
         private Label label12;
         private TextBox txtDbUser;
         private Label label11;
@@ -707,9 +687,7 @@ namespace ToolsUI.Config
         private GroupBox grpDatabase;
         private GroupBox grpPaths;
         private Panel pnlConfigure;
-        private Button btnBrowseTempPath;
-        private Button btnBrowseDataPath;
-        private Button btnBrowseLogPath;
+        private Button btnBrowsePath;
         private Panel pnlDiagnostics;
         private Panel pnlCfgLeft;
         private TreeView tvDiagnostics;
@@ -728,5 +706,9 @@ namespace ToolsUI.Config
         private Panel panel1;
         private Button btnPasswordEditor;
         private ComboBox cboPassword;
+        private ComboBox cboPathName;
+        private Label label1;
+        private ComboBox cboPathType;
+        private Label label2;
     }
 }

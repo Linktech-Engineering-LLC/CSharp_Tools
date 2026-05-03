@@ -5,7 +5,7 @@
  * File: FrmConfig.cs
  * Version: 1.0.0
  * Created: 2026-03-31
- * Modified: 2026-04-22
+ * Modified: 2026-05-03
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -41,6 +41,7 @@ namespace ToolsUI.Config
         #region Private Variables
         private UIHelperService Helpers = new();
         private TabLayoutManager _layout;
+        private bool _loadingPath = false;
         private SettingsModel CurrentSettings;
         private readonly string _configPath;
         private SettingsModel currentSettings {  get; set; }
@@ -56,6 +57,8 @@ namespace ToolsUI.Config
             InitializeTreeControls();
             cboEngines.DataSource = Enum.GetValues(typeof(DatabaseEngine));
             cboPassword.DataSource = Enum.GetValues(typeof(PasswordTarget));
+            cboPathName.DataSource = Enum.GetValues(typeof(PathLocation));
+            cboPathType.DataSource = Enum.GetValues(typeof(PathType));
             _configPath = ConfigManager.GetConfigPath(AppName);
         }
         #endregion
@@ -78,7 +81,7 @@ namespace ToolsUI.Config
             txtDbUser.Enabled = usesNetwork;
 
             // Enable/disable schema + instance
-            txtDbName.Enabled = usesNetwork;
+            txtDbSchema.Enabled = usesNetwork;
             txtDbInstance.Enabled = usesNetwork && (engine == DatabaseEngine.SQLServer || engine == DatabaseEngine.Oracle);
 
             // Apply default port only when enabled
@@ -104,16 +107,14 @@ namespace ToolsUI.Config
             // -------------------------
             // PATHS
             // -------------------------
-            txtLogPath.Text = s.LogPath;
-            txtDataPath.Text = s.DataPath;
-            txtTempPath.Text = s.TempPath;
+            //txtPath.Text = s.LogPath.PathValue;
 
             // -------------------------
             // DATABASE
             // -------------------------
             txtDbHost.Text = s.DbHost;
             numDbPort.IntValue = s.DbPort;
-            txtDbName.Text = s.DbName;
+            txtDbSchema.Text = s.DbName;
             txtDbUser.Text = s.DbUser;
             txtDbInstance.Text = s.DbInstance;
 
@@ -129,7 +130,12 @@ namespace ToolsUI.Config
                 dlg.SelectedPath = target.Text;
 
             if (dlg.ShowDialog(this) == DialogResult.OK)
+            {
                 target.Text = dlg.SelectedPath;
+
+                // NEW: update the selected AppPath in currentSettings
+                UpdateSelectedPathModel(dlg.SelectedPath);
+            }
         }
         private SettingsModel CollectSettingsFromUI()
         {
@@ -137,13 +143,11 @@ namespace ToolsUI.Config
             // that already contains updated PasswordMetadata objects
             // from the password dialog.
 
-            currentSettings.LogPath = txtLogPath.Text;
-            currentSettings.DataPath = txtDataPath.Text;
-            currentSettings.TempPath = txtTempPath.Text;
+            //currentSettings.LogPath.PathValue = txtPath.Text;
 
             currentSettings.DbHost = txtDbHost.Text;
             currentSettings.DbPort = numDbPort.Enabled ? numDbPort.IntValue : 0;
-            currentSettings.DbName = txtDbName.Text;
+            currentSettings.DbName = txtDbSchema.Text;
             currentSettings.DbUser = txtDbUser.Text;
             currentSettings.DbInstance = txtDbInstance.Text;
 
@@ -171,6 +175,18 @@ namespace ToolsUI.Config
                 _ => new PasswordMetadata()
             };
         }
+        private AppPath? GetSelectedPath()
+        {
+            if (cboPathName.SelectedItem == null || currentSettings == null)
+            {
+                return null;
+            }
+
+            string selectedName = cboPathName.SelectedItem.ToString()!;
+
+            return currentSettings.Paths
+                .FirstOrDefault(p => p.PathName == selectedName);
+        }
         private void InitializeControls()
         {
             btnSave.Click += ButtonClicked;
@@ -178,13 +194,14 @@ namespace ToolsUI.Config
             btnRead.Click += ButtonClicked;
             btnTest.Click += ButtonClicked;
             btnPasswordEditor.Click += ButtonClicked;
-            btnBrowseLogPath.Click += (s, e) => BrowseForFolder(txtLogPath);
-            btnBrowseDataPath.Click += (s, e) => BrowseForFolder(txtDataPath);
-            btnBrowseTempPath.Click += (s, e) => BrowseForFolder(txtTempPath);
+            btnBrowsePath.Click += (s, e) => BrowseForFolder(txtPath);
             Load += FormLoad;
             lstDiagnosticsResults.DrawItem += LstSchemaResults_DrawItem;
-            cboEngines.SelectedIndexChanged += CboEngines_SelectedIndexChanged;
+            cboPathName.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
+            cboPathType.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
+            cboEngines.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
             tabConfig.SelectedIndexChanged += TabConfig_SelectedIndexChanged;
+            txtPath.TextChanged += TextBox_TextChanged;
             numDbPort.Leave += NumDbPort_Leave;
         }
         private void InitializeTreeControls()
@@ -214,19 +231,6 @@ namespace ToolsUI.Config
             );
 
             e.DrawFocusRectangle();
-        }
-        private void PopulateDetailsPanel(DiagnosticTest test, DiagnosticResult result)
-        {
-            lblTestName.Text = result.TestName;
-
-            txtDescription.Text = DiagnosticsMetadata.GetDescription(test);
-            txtExpected.Text = DiagnosticsMetadata.GetExpected(test);
-
-            txtActual.Text = result.Passed
-                ? "Test passed successfully."
-                : result.Error ?? "Test failed.";
-
-            txtRepair.Text = DiagnosticsMetadata.GetRepair(test);
         }
         private void PopulateDiagnosticsTree()
         {
@@ -280,6 +284,19 @@ namespace ToolsUI.Config
 
             tvDiagnostics.Nodes.Add(fileGroup);
             tvDiagnostics.ExpandAll();
+        }
+        private string ResolvePasswordFromSettings(PasswordMetadata meta)
+        {
+            if (meta.Location == PasswordLocation.Vault ||
+                meta.Representation == PasswordRepresentation.Secret)
+            {
+                // meta.Password is the vault key
+                var pw = Vault.Read(meta.Password);
+                return pw ?? string.Empty;
+            }
+
+            // Otherwise meta.Password is the actual password
+            return meta.Password ?? string.Empty;
         }
         private void RunTest(DiagnosticTest test)
         {
@@ -343,50 +360,6 @@ namespace ToolsUI.Config
                     break;
             }
         }
-
-        private void ShowDiagnosticResultOnButton(DiagnosticResult result, Button button)
-        {
-            string baseText = button.Tag?.ToString() ?? button.Text;
-
-            if (result.Passed)
-            {
-                button.ForeColor = Color.Green;
-                button.Text = $"{baseText}  ✔ Passed";
-                button.BackColor = Color.FromArgb(230, 255, 230); // light green
-
-                //_logger?.Info($"Diagnostics: {result.TestName} passed");
-            }
-            else
-            {
-                button.ForeColor = Color.Red;
-                button.Text = $"{baseText}  ✖ Failed";
-                button.BackColor = Color.FromArgb(255, 230, 230); // light red
-
-                // Log the error
-                //_logger?.Error($"Diagnostics: {result.TestName} failed: {result.Error}");
-
-                // Show the error to the user
-                MessageBox.Show(
-                    result.Error ?? "Unknown error",
-                    $"{result.TestName} Failed",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-            }
-        }
-        private string SavePasswordToVault(string key, string uiValue)
-        {
-            // If empty → do NOT write to vault, return empty
-            if (string.IsNullOrWhiteSpace(uiValue))
-                return "";
-
-            // If UI contains a real password (not the key), write it
-            if (!uiValue.Equals(key, StringComparison.OrdinalIgnoreCase))
-                VaultManager.WriteSecret(key, uiValue);
-
-            // Save only the key
-            return key;
-        }
         private async void TestConnectionAsync(object sender, EventArgs e)
         {
             DatabaseSettings dbSettings = new()
@@ -395,22 +368,27 @@ namespace ToolsUI.Config
                 Host = txtDbHost.Text,
                 Port = numDbPort.IntValue,
                 User = txtDbUser.Text,
-                Schema = txtDbName.Text,
+                Password = ResolvePasswordFromSettings(currentSettings.DbPassword ?? new PasswordMetadata()),
+                Schema = txtDbSchema.Text,
                 Instance = txtDbInstance.Text
             };
             bool ok = await DbConnectionTester.TestConnectionAsync(dbSettings);
             MessageBox.Show(ok ? "Connection successful" : "Connection failed");
         }
-        private void TogglePassword(TextBox txt, Button btn)
+        private void UpdateSelectedPathModel(string newPath)
         {
-            bool isShowing = txt.PasswordChar == '\0';
+            var ap = GetSelectedPath();
+            if (ap == null)
+                return;
 
-            // Toggle the mask
-            txt.PasswordChar = isShowing ? '•' : '\0';
-
-            // Update the button label
-            btn.Text = isShowing ? "Show" : "Hide";
+            ap.PathValue = newPath;
+            ap.PathType = Filer.DetectPathType(newPath);
+            // If you want to auto‑assign a type when browsing:
+            // (Optional — depends on your design)
+            if (ap.PathType == PathType.None || ap.PathType == default)
+                ap.PathType = PathType.LocalDrive;
         }
+
         #endregion
         #region Public Properties
         public string AppName { get; set; }
@@ -484,11 +462,36 @@ namespace ToolsUI.Config
                 }
             }
         }
-        private void CboEngines_SelectedIndexChanged(object sender, EventArgs e)
+        private void ComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cboEngines.SelectedItem is DatabaseEngine engine)
+            if (sender is ComboBox cbo)
             {
-                ApplyEngineRules();
+                switch (cbo.Tag)
+                {
+                    case "Engines":
+                        ApplyEngineRules();
+                        break;
+                    case "PathName":
+                        AppPath cpath = GetSelectedPath()!;
+                        if (cpath != null)
+                        {
+                            _loadingPath = true;   // prevent recursive updates
+
+                            cboPathType.SelectedItem = cpath.PathType;
+                            txtPath.Text = cpath.PathValue;
+
+                            _loadingPath = false;
+                        }
+                        break;
+                    case "PathType":
+                        if (_loadingPath) return;   // ignore UI loads
+                        AppPath ap = GetSelectedPath()!;
+                        if (ap != null && cboPathType.SelectedItem is PathType type)
+                            ap.PathType = type; 
+                        break;
+                    default:
+                        break;
+                }
             }
         }
         private void FormLoad(object sender, EventArgs e)
@@ -531,6 +534,24 @@ namespace ToolsUI.Config
         {
             _layout?.ApplyLayout();
         }
+        private void TextBox_TextChanged(object sender, EventArgs e)
+        {
+            if(sender is not TextBox txt)
+                return;
+            switch (txt.Tag)
+            {
+                case "Path":
+                    if (_loadingPath) return;
+
+                    AppPath ap = GetSelectedPath()!;
+                    if (ap != null)
+                        ap.PathValue = txtPath.Text; 
+                    break;
+                default:
+                    break;
+            }
+        }
+
         private void TvDiagnostics_AfterSelect(object sender, TreeViewEventArgs e)
         {
             var tag = e.Node?.Tag as DiagnosticNodeTag;

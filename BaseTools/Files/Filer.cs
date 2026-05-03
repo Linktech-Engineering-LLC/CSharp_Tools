@@ -3,8 +3,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Files/Filer.cs
  * File: Filer.cs
+ * Version: 1.0.0
  * Created: 2025-12-30
- * Modified: 2026-01-31
+ * Modified: 2026-05-03
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -27,6 +28,7 @@ using System.Diagnostics.CodeAnalysis;
 #region Project Libraries
 using Tools.Utilities;
 using Tools.Logging;
+using Tools.Config;
 #endregion
 
 namespace Tools.Files
@@ -74,6 +76,25 @@ namespace Tools.Files
         #region Public Properties
         #endregion
         #region Public Methods
+        public static PathType DetectPathType(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return PathType.None;
+
+            if (path.StartsWith(@"\\?\"))
+                return PathType.DeviceLiteral;
+
+            if (path.StartsWith(@"\\."))
+                return PathType.DeviceDOS;
+
+            if (path.StartsWith(@"\\"))
+                return PathType.UNC;
+
+            if (path.Contains(':'))
+                return PathType.LocalDrive;
+
+            return PathType.Relative;
+        }
         #endregion
     }
 }

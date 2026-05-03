@@ -5,7 +5,7 @@
  * File: PasswordDialogs.cs
  * Version: 1.0.0
  * Created: 2026-04-04
- * Modified: 2026-04-22
+ * Modified: 2026-05-01
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -21,9 +21,6 @@ using Tools.Enums;
 
 namespace Tools.Config
 {
-    public class PasswordDialogs
-    {
-    }
     public class PasswordDialogResult
     {
         public bool Accepted { get; set; }

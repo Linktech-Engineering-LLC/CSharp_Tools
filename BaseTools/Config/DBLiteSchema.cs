@@ -3,8 +3,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/DBLiteSchema.cs
  * File: DBLiteSchema.cs
+ * Version: 1.0.0
  * Created: 2026-03-31
- * Modified: 2026-04-02
+ * Modified: 2026-04-30
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -35,7 +36,7 @@ namespace Tools.Config
             // Ensure schema version table exists
             db.CreateTableIfMissing<SchemaInfo>("SchemaInfo");
 
-            var info = db.Load<SchemaInfo>("SchemaInfo") ?? new SchemaInfo();
+            SchemaInfo info = db.Load<SchemaInfo>("SchemaInfo") ?? new SchemaInfo();
 
             if (info.Version == 0)
             {

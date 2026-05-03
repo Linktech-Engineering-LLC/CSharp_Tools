@@ -5,7 +5,7 @@
  * File: SettingsModel.cs
  * Version: 1.0.0
  * Created: 2026-03-31
- * Modified: 2026-04-22
+ * Modified: 2026-05-03
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -25,9 +25,7 @@ namespace Tools.Config
         public PasswordMetadata ConfigPassword { get; set; } = new PasswordMetadata();
         public PasswordMetadata DbPassword { get; set; } = new PasswordMetadata();
 
-        public string LogPath { get; set; } = string.Empty;
-        public string DataPath { get; set; } = string.Empty;
-        public string TempPath { get; set; } = string.Empty;
+        public List<AppPath> Paths { get; set; } = new List<AppPath>();
 
         public string DbHost { get; set; } = "localhost";
         public int DbPort { get; set; } = 3306;
