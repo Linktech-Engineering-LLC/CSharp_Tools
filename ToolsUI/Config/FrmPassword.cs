@@ -5,7 +5,7 @@
  * File: FrmPassword.cs
  * Version: 1.0.0
  * Created: 2026-04-04
- * Modified: 2026-04-30
+ * Modified: 2026-05-11
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -231,7 +231,7 @@ namespace ToolsUI.Config
                         else
                         {
                             // Non-vault mode
-                            meta.Location = PasswordLocation.Database;
+                            meta.Location = PasswordLocation.Inline;
                             meta.Representation = selectedRep ?? PasswordRepresentation.Unknown;
                             meta.Password = newPassword;
                         }

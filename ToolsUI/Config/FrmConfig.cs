@@ -5,7 +5,7 @@
  * File: FrmConfig.cs
  * Version: 1.0.0
  * Created: 2026-03-31
- * Modified: 2026-05-03
+ * Modified: 2026-05-11
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -30,6 +30,7 @@ using Tools.Enums;
 using Tools.Files;
 using ToolsUI.Helpers;
 using ToolsUI.Layout;
+using ToolsUI.UserControls;
 #endregion
 
 namespace ToolsUI.Config
@@ -43,6 +44,7 @@ namespace ToolsUI.Config
         private TabLayoutManager _layout;
         private bool _loadingPath = false;
         private SettingsModel CurrentSettings;
+        private SettingsModel _settings;
         private readonly string _configPath;
         private SettingsModel currentSettings {  get; set; }
         #endregion
@@ -54,11 +56,8 @@ namespace ToolsUI.Config
             InitializeComponent();
             AppName = appname;
             InitializeControls();
-            InitializeTreeControls();
+            //InitializeTreeControls();
             cboEngines.DataSource = Enum.GetValues(typeof(DatabaseEngine));
-            cboPassword.DataSource = Enum.GetValues(typeof(PasswordTarget));
-            cboPathName.DataSource = Enum.GetValues(typeof(PathLocation));
-            cboPathType.DataSource = Enum.GetValues(typeof(PathType));
             _configPath = ConfigManager.GetConfigPath(AppName);
         }
         #endregion
@@ -112,30 +111,84 @@ namespace ToolsUI.Config
             // -------------------------
             // DATABASE
             // -------------------------
-            txtDbHost.Text = s.DbHost;
-            numDbPort.IntValue = s.DbPort;
-            txtDbSchema.Text = s.DbName;
-            txtDbUser.Text = s.DbUser;
-            txtDbInstance.Text = s.DbInstance;
+            //txtDbHost.Text = s.DbHost;
+            //numDbPort.IntValue = s.DbPort;
+            //txtDbSchema.Text = s.DbName;
+            //txtDbUser.Text = s.DbUser;
+            //txtDbInstance.Text = s.DbInstance;
 
             // Apply enable/disable rules for engine
             ApplyEngineRules();
         }
-        private void BrowseForFolder(TextBox target)
+        private void BuildConfigTree()
         {
-            using var dlg = new FolderBrowserDialog();
-            dlg.ShowNewFolderButton = true;
+            tvConfig.Nodes.Clear();
 
-            if (!string.IsNullOrWhiteSpace(target.Text) && Directory.Exists(target.Text))
-                dlg.SelectedPath = target.Text;
+            // Root
+            TreeNode root = tvConfig.Nodes.Add("Configuration");
 
-            if (dlg.ShowDialog(this) == DialogResult.OK)
+            // -------------------------
+            // SECURITY (enum-driven)
+            // -------------------------
+            TreeNode secNode = root.Nodes.Add("Security");
+
+            foreach (PasswordTarget target in Enum.GetValues(typeof(PasswordTarget)))
             {
-                target.Text = dlg.SelectedPath;
+                TreeNode node = secNode.Nodes.Add(target.ToString());
 
-                // NEW: update the selected AppPath in currentSettings
-                UpdateSelectedPathModel(dlg.SelectedPath);
+                if (target == PasswordTarget.Database)
+                {
+                    // Tag the parent node as Database
+                    node.Tag = target;
+                    DatabaseConfig dbf = _settings.Database;
+                    // Add child nodes for each connection
+                    foreach (DbConnection? conn in dbf.Connections)
+                    {
+                        string label = $"{conn.ConnectionId} ({conn.Engine})";
+                        TreeNode child = node.Nodes.Add(label);
+
+                        // Tag the child with BOTH target + connection ID
+                        child.Tag = (PasswordTarget.Database, (string)conn.ConnectionId);
+                    }
+                }
+                else
+                {
+                    // Normal case: Application, Configuration
+                    node.Tag = target;
+                }
             }
+
+            // -------------------------
+            // PATHS (enum-driven)
+            // -------------------------
+            TreeNode pathsNode = root.Nodes.Add("Paths");
+
+            foreach (PathLocation loc in Enum.GetValues(typeof(PathLocation)))
+            {
+                TreeNode node = pathsNode.Nodes.Add(loc.ToString());
+                node.Tag = loc;      // store enum for AfterSelect
+            }
+
+            // -------------------------
+            // DATABASE (data-driven)
+            // -------------------------
+            TreeNode dbNode = root.Nodes.Add("Database");
+
+            // Connections branch
+            TreeNode connRoot = dbNode.Nodes.Add("Connections");
+
+            foreach (DbConnection? conn in _settings.Database.Connections)
+            {
+                string label = $"{conn.ConnectionId} ({conn.Engine})";
+                TreeNode node = connRoot.Nodes.Add(label);
+                node.Tag = conn;     // store the actual DbConnection object
+            }
+
+            // Add Connection node
+            TreeNode addNode = connRoot.Nodes.Add("Add Connection…");
+            addNode.Tag = "AddConnection";
+
+            root.Expand();
         }
         private SettingsModel CollectSettingsFromUI()
         {
@@ -145,12 +198,11 @@ namespace ToolsUI.Config
 
             //currentSettings.LogPath.PathValue = txtPath.Text;
 
-            currentSettings.DbHost = txtDbHost.Text;
-            currentSettings.DbPort = numDbPort.Enabled ? numDbPort.IntValue : 0;
-            currentSettings.DbName = txtDbSchema.Text;
-            currentSettings.DbUser = txtDbUser.Text;
-            currentSettings.DbInstance = txtDbInstance.Text;
-
+            //currentSettings.DbHost = txtDbHost.Text;
+            //currentSettings.DbPort = numDbPort.Enabled ? numDbPort.IntValue : 0;
+            //currentSettings.DbName = txtDbSchema.Text;
+            //currentSettings.DbUser = txtDbUser.Text;
+            //currentSettings.DbInstance = txtDbInstance.Text;
             return currentSettings;
         }
         private void DisplayResult(DiagnosticResult result)
@@ -165,50 +217,54 @@ namespace ToolsUI.Config
             if (result.ExtraItems.Count > 0)
                 lstDiagnosticsResults.Items.Add($"   Extra: {string.Join(", ", result.ExtraItems)}");
         }
-        private PasswordMetadata GetPasswordMetadata(PasswordTarget target)
-        {
-            return target switch
-            {
-                PasswordTarget.Application => currentSettings.AppPassword ??= new PasswordMetadata(),
-                PasswordTarget.Configuration => currentSettings.ConfigPassword ??= new PasswordMetadata(),
-                PasswordTarget.Database => currentSettings.DbPassword ??= new PasswordMetadata(),
-                _ => new PasswordMetadata()
-            };
-        }
-        private AppPath? GetSelectedPath()
-        {
-            if (cboPathName.SelectedItem == null || currentSettings == null)
-            {
-                return null;
-            }
-
-            string selectedName = cboPathName.SelectedItem.ToString()!;
-
-            return currentSettings.Paths
-                .FirstOrDefault(p => p.PathName == selectedName);
-        }
         private void InitializeControls()
         {
             btnSave.Click += ButtonClicked;
             btnCancel.Click += ButtonClicked;
             btnRead.Click += ButtonClicked;
             btnTest.Click += ButtonClicked;
-            btnPasswordEditor.Click += ButtonClicked;
-            btnBrowsePath.Click += (s, e) => BrowseForFolder(txtPath);
             Load += FormLoad;
             lstDiagnosticsResults.DrawItem += LstSchemaResults_DrawItem;
-            cboPathName.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
-            cboPathType.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
             cboEngines.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
             tabConfig.SelectedIndexChanged += TabConfig_SelectedIndexChanged;
-            txtPath.TextChanged += TextBox_TextChanged;
             numDbPort.Leave += NumDbPort_Leave;
         }
-        private void InitializeTreeControls()
+        private void LoadControl(UserControl ctrl)
         {
-            tvDiagnostics.AfterSelect += TvDiagnostics_AfterSelect;
-            btnRunTest.Click += TvDiagnosticButton_Click;
-            btnRunGroup.Click += TvDiagnosticButton_Click;
+            pnlContent.Controls.Clear();
+            ctrl.Dock = DockStyle.Fill;
+            pnlContent.Controls.Add(ctrl);
+        }
+        private void LoadPasswordEditor(PasswordTarget target, string? connectionId)
+        {
+            UcPasswordEditor editor = new UcPasswordEditor
+            {
+                CurrentSettings = _settings
+            };
+            editor.CloseRequested += (s, e) =>
+            {
+                pnlContent.Controls.Remove(editor);
+                editor.Dispose();
+                RefreshTree();
+            };
+            editor.Initialize(target, connectionId);
+
+            LoadControl(editor);
+        }
+        private void LoadPathEditor(PathLocation loc)
+        {
+            UcPathEditor editor = new UcPathEditor
+            {
+                CurrentSettings = _settings
+            };
+            editor.CloseRequested += (s, e) =>
+            {
+                pnlContent.Controls.Remove(editor);
+                editor.Dispose();
+                RefreshTree();
+            };
+            editor.Initialize(loc, _settings);
+            LoadControl(editor);
         }
         private void LstSchemaResults_DrawItem(object sender, DrawItemEventArgs e)
         {
@@ -285,18 +341,11 @@ namespace ToolsUI.Config
             tvDiagnostics.Nodes.Add(fileGroup);
             tvDiagnostics.ExpandAll();
         }
-        private string ResolvePasswordFromSettings(PasswordMetadata meta)
+        private void RefreshTree()
         {
-            if (meta.Location == PasswordLocation.Vault ||
-                meta.Representation == PasswordRepresentation.Secret)
-            {
-                // meta.Password is the vault key
-                var pw = Vault.Read(meta.Password);
-                return pw ?? string.Empty;
-            }
-
-            // Otherwise meta.Password is the actual password
-            return meta.Password ?? string.Empty;
+            tvConfig.Nodes.Clear();
+            BuildConfigTree();   // your existing builder
+            tvConfig.ExpandAll();
         }
         private void RunTest(DiagnosticTest test)
         {
@@ -343,23 +392,6 @@ namespace ToolsUI.Config
             var result = DiagnosticsService.TestRequiredFields(_configPath);
             DisplayResult(result);
         }
-        private void SavePasswordMetadata(PasswordTarget target, PasswordMetadata meta)
-        {
-            switch (target)
-            {
-                case PasswordTarget.Application:
-                    currentSettings.AppPassword = meta;
-                    break;
-
-                case PasswordTarget.Configuration:
-                    currentSettings.ConfigPassword = meta;
-                    break;
-
-                case PasswordTarget.Database:
-                    currentSettings.DbPassword = meta;
-                    break;
-            }
-        }
         private async void TestConnectionAsync(object sender, EventArgs e)
         {
             DatabaseSettings dbSettings = new()
@@ -368,25 +400,12 @@ namespace ToolsUI.Config
                 Host = txtDbHost.Text,
                 Port = numDbPort.IntValue,
                 User = txtDbUser.Text,
-                Password = ResolvePasswordFromSettings(currentSettings.DbPassword ?? new PasswordMetadata()),
+                //Password = ResolvePasswordFromSettings(currentSettings.DbPassword ?? new PasswordMetadata()),
                 Schema = txtDbSchema.Text,
                 Instance = txtDbInstance.Text
             };
             bool ok = await DbConnectionTester.TestConnectionAsync(dbSettings);
             MessageBox.Show(ok ? "Connection successful" : "Connection failed");
-        }
-        private void UpdateSelectedPathModel(string newPath)
-        {
-            var ap = GetSelectedPath();
-            if (ap == null)
-                return;
-
-            ap.PathValue = newPath;
-            ap.PathType = Filer.DetectPathType(newPath);
-            // If you want to auto‑assign a type when browsing:
-            // (Optional — depends on your design)
-            if (ap.PathType == PathType.None || ap.PathType == default)
-                ap.PathType = PathType.LocalDrive;
         }
 
         #endregion
@@ -422,26 +441,6 @@ namespace ToolsUI.Config
                     case "Encrypt":
                         MessageBox.Show("Encryption settings would be displayed here.", "Encryption", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         break;
-                    case "PasswordEditor":
-                        {
-                            PasswordTarget target = (PasswordTarget)cboPassword.SelectedItem!;
-
-                            // 1. Retrieve the correct metadata from currentSettings
-                            var meta = GetPasswordMetadata(target);
-
-                            // 2. Launch the password editor dialog
-                            using FrmPassword dlg = new(target, meta);
-
-                            dlg.ShowDialog();
-
-                            // 3. Check the dialog's custom result object, not DialogResult.OK
-                            if (dlg.PasswordData?.Accepted == true)
-                            {
-                                SavePasswordMetadata(target, dlg.PasswordData.Metadata);
-                            }
-
-                            break;
-                        }
                     case "Read":
                         // Here you would read the existing settings from the DBLite file and populate the UI
                         SettingsModel reader = ConfigManager.Load(AppName);
@@ -471,24 +470,6 @@ namespace ToolsUI.Config
                     case "Engines":
                         ApplyEngineRules();
                         break;
-                    case "PathName":
-                        AppPath cpath = GetSelectedPath()!;
-                        if (cpath != null)
-                        {
-                            _loadingPath = true;   // prevent recursive updates
-
-                            cboPathType.SelectedItem = cpath.PathType;
-                            txtPath.Text = cpath.PathValue;
-
-                            _loadingPath = false;
-                        }
-                        break;
-                    case "PathType":
-                        if (_loadingPath) return;   // ignore UI loads
-                        AppPath ap = GetSelectedPath()!;
-                        if (ap != null && cboPathType.SelectedItem is PathType type)
-                            ap.PathType = type; 
-                        break;
                     default:
                         break;
                 }
@@ -497,9 +478,11 @@ namespace ToolsUI.Config
         private void FormLoad(object sender, EventArgs e)
         {
             // Load settings
-            currentSettings = ConfigManager.Load(AppName);
-            ApplySettingsToUI(currentSettings);
-            ApplyEngineRules();
+            _settings = ConfigManager.Load(AppName);
+            BuildConfigTree();
+            tvConfig.AfterSelect += TvConfig_AfterSelect;
+            //ApplySettingsToUI(currentSettings);
+            //ApplyEngineRules();
 
             // Build layout manager
             _layout = new TabLayoutManager(
@@ -534,24 +517,32 @@ namespace ToolsUI.Config
         {
             _layout?.ApplyLayout();
         }
-        private void TextBox_TextChanged(object sender, EventArgs e)
+        private void TvConfig_AfterSelect(object sender, TreeViewEventArgs e)
         {
-            if(sender is not TextBox txt)
-                return;
-            switch (txt.Tag)
-            {
-                case "Path":
-                    if (_loadingPath) return;
+            TreeNode node = e.Node;
 
-                    AppPath ap = GetSelectedPath()!;
-                    if (ap != null)
-                        ap.PathValue = txtPath.Text; 
+            // 1. If this node has children, DO NOT load the editor
+            if (node.Nodes.Count > 0)
+            {
+                return;
+            }
+
+            // 2. Handle leaf nodes only
+            switch (node.Tag)
+            {
+                case PasswordTarget target:
+                    LoadPasswordEditor(target, null);
                     break;
-                default:
+
+                case ValueTuple<PasswordTarget, string> dbTag:
+                    LoadPasswordEditor(dbTag.Item1, dbTag.Item2);
+                    break;
+
+                case PathLocation loc:
+                    LoadPathEditor(loc);
                     break;
             }
         }
-
         private void TvDiagnostics_AfterSelect(object sender, TreeViewEventArgs e)
         {
             var tag = e.Node?.Tag as DiagnosticNodeTag;

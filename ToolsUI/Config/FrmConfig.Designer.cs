@@ -5,7 +5,7 @@
  * File: FrmConfig.Designer.cs
  * Version: 1.0.0
  * Created: None
- * Modified: 2026-05-03
+ * Modified: 2026-05-11
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -41,24 +41,14 @@ namespace ToolsUI.Config
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
+            TreeNode treeNode1 = new TreeNode("Security");
+            TreeNode treeNode2 = new TreeNode("Paths");
+            TreeNode treeNode3 = new TreeNode("Database");
             tabConfig = new TabControl();
             pgeConfigure = new TabPage();
             pnlConfigure = new Panel();
-            pnlConfigureGroups = new Panel();
-            pnlCfgLeft = new Panel();
-            grpPaths = new GroupBox();
-            cboPathType = new ComboBox();
-            label2 = new Label();
-            cboPathName = new ComboBox();
-            label1 = new Label();
-            btnBrowsePath = new Button();
-            label5 = new Label();
-            txtPath = new TextBox();
-            grpSecurity = new GroupBox();
-            grpPassword = new GroupBox();
-            panel1 = new Panel();
-            btnPasswordEditor = new Button();
-            cboPassword = new ComboBox();
+            pnlContent = new Panel();
+            tvConfig = new TreeView();
             pnlConfigureButtons = new Panel();
             btnRead = new Button();
             btnCancel = new Button();
@@ -95,12 +85,6 @@ namespace ToolsUI.Config
             tabConfig.SuspendLayout();
             pgeConfigure.SuspendLayout();
             pnlConfigure.SuspendLayout();
-            pnlConfigureGroups.SuspendLayout();
-            pnlCfgLeft.SuspendLayout();
-            grpPaths.SuspendLayout();
-            grpSecurity.SuspendLayout();
-            grpPassword.SuspendLayout();
-            panel1.SuspendLayout();
             pnlConfigureButtons.SuspendLayout();
             grpDatabase.SuspendLayout();
             pgeDiagnostics.SuspendLayout();
@@ -117,7 +101,7 @@ namespace ToolsUI.Config
             tabConfig.Location = new Point(2, 7);
             tabConfig.Name = "tabConfig";
             tabConfig.SelectedIndex = 0;
-            tabConfig.Size = new Size(750, 530);
+            tabConfig.Size = new Size(585, 614);
             tabConfig.TabIndex = 0;
             // 
             // pgeConfigure
@@ -126,177 +110,54 @@ namespace ToolsUI.Config
             pgeConfigure.Location = new Point(4, 24);
             pgeConfigure.Name = "pgeConfigure";
             pgeConfigure.Padding = new Padding(3);
-            pgeConfigure.Size = new Size(742, 502);
+            pgeConfigure.Size = new Size(577, 586);
             pgeConfigure.TabIndex = 0;
             pgeConfigure.Text = "Configure";
             pgeConfigure.UseVisualStyleBackColor = true;
             // 
             // pnlConfigure
             // 
-            pnlConfigure.Controls.Add(pnlConfigureGroups);
+            pnlConfigure.Controls.Add(grpDatabase);
+            pnlConfigure.Controls.Add(pnlContent);
+            pnlConfigure.Controls.Add(tvConfig);
             pnlConfigure.Dock = DockStyle.Top;
             pnlConfigure.Location = new Point(3, 3);
             pnlConfigure.Name = "pnlConfigure";
-            pnlConfigure.Size = new Size(736, 350);
+            pnlConfigure.Size = new Size(571, 580);
             pnlConfigure.TabIndex = 3;
             // 
-            // pnlConfigureGroups
+            // pnlContent
             // 
-            pnlConfigureGroups.Controls.Add(pnlCfgLeft);
-            pnlConfigureGroups.Controls.Add(pnlConfigureButtons);
-            pnlConfigureGroups.Controls.Add(grpDatabase);
-            pnlConfigureGroups.Location = new Point(3, 3);
-            pnlConfigureGroups.Name = "pnlConfigureGroups";
-            pnlConfigureGroups.Size = new Size(726, 247);
-            pnlConfigureGroups.TabIndex = 2;
+            pnlContent.Dock = DockStyle.Top;
+            pnlContent.Location = new Point(223, 0);
+            pnlContent.Name = "pnlContent";
+            pnlContent.Size = new Size(348, 272);
+            pnlContent.TabIndex = 4;
             // 
-            // pnlCfgLeft
+            // tvConfig
             // 
-            pnlCfgLeft.Controls.Add(grpPaths);
-            pnlCfgLeft.Controls.Add(grpSecurity);
-            pnlCfgLeft.Location = new Point(0, 0);
-            pnlCfgLeft.Name = "pnlCfgLeft";
-            pnlCfgLeft.Size = new Size(395, 167);
-            pnlCfgLeft.TabIndex = 4;
-            // 
-            // grpPaths
-            // 
-            grpPaths.Controls.Add(cboPathType);
-            grpPaths.Controls.Add(label2);
-            grpPaths.Controls.Add(cboPathName);
-            grpPaths.Controls.Add(label1);
-            grpPaths.Controls.Add(btnBrowsePath);
-            grpPaths.Controls.Add(label5);
-            grpPaths.Controls.Add(txtPath);
-            grpPaths.Dock = DockStyle.Top;
-            grpPaths.Location = new Point(0, 73);
-            grpPaths.Name = "grpPaths";
-            grpPaths.Size = new Size(395, 94);
-            grpPaths.TabIndex = 3;
-            grpPaths.TabStop = false;
-            grpPaths.Text = "Paths";
-            // 
-            // cboPathType
-            // 
-            cboPathType.FormattingEnabled = true;
-            cboPathType.Location = new Point(234, 15);
-            cboPathType.Name = "cboPathType";
-            cboPathType.Size = new Size(139, 23);
-            cboPathType.TabIndex = 12;
-            cboPathType.Tag = "PathType";
-            // 
-            // label2
-            // 
-            label2.AutoSize = true;
-            label2.Location = new Point(195, 19);
-            label2.Name = "label2";
-            label2.Size = new Size(33, 15);
-            label2.TabIndex = 11;
-            label2.Text = "Type";
-            // 
-            // cboPathName
-            // 
-            cboPathName.FormattingEnabled = true;
-            cboPathName.Location = new Point(50, 15);
-            cboPathName.Name = "cboPathName";
-            cboPathName.Size = new Size(139, 23);
-            cboPathName.TabIndex = 10;
-            cboPathName.Tag = "PathName";
-            // 
-            // label1
-            // 
-            label1.AutoSize = true;
-            label1.Location = new Point(6, 19);
-            label1.Name = "label1";
-            label1.Size = new Size(40, 15);
-            label1.TabIndex = 9;
-            label1.Text = "Name";
-            // 
-            // btnBrowsePath
-            // 
-            btnBrowsePath.Location = new Point(262, 44);
-            btnBrowsePath.Name = "btnBrowsePath";
-            btnBrowsePath.Size = new Size(75, 23);
-            btnBrowsePath.TabIndex = 6;
-            btnBrowsePath.Tag = "LogSelector";
-            btnBrowsePath.Text = "Browse";
-            toolTip1.SetToolTip(btnBrowsePath, "Browse for the Logging Folder");
-            btnBrowsePath.UseVisualStyleBackColor = true;
-            // 
-            // label5
-            // 
-            label5.AutoSize = true;
-            label5.Location = new Point(41, 48);
-            label5.Name = "label5";
-            label5.Size = new Size(32, 15);
-            label5.TabIndex = 0;
-            label5.Text = "Path";
-            // 
-            // txtPath
-            // 
-            txtPath.Location = new Point(85, 44);
-            txtPath.Name = "txtPath";
-            txtPath.Size = new Size(171, 23);
-            txtPath.TabIndex = 1;
-            txtPath.Tag = "Path";
-            toolTip1.SetToolTip(txtPath, "Directory which contains the logs");
-            // 
-            // grpSecurity
-            // 
-            grpSecurity.Controls.Add(grpPassword);
-            grpSecurity.Dock = DockStyle.Top;
-            grpSecurity.Location = new Point(0, 0);
-            grpSecurity.Name = "grpSecurity";
-            grpSecurity.Size = new Size(395, 73);
-            grpSecurity.TabIndex = 2;
-            grpSecurity.TabStop = false;
-            grpSecurity.Text = "Security";
-            // 
-            // grpPassword
-            // 
-            grpPassword.Controls.Add(panel1);
-            grpPassword.Dock = DockStyle.Top;
-            grpPassword.Location = new Point(3, 19);
-            grpPassword.Name = "grpPassword";
-            grpPassword.Size = new Size(389, 54);
-            grpPassword.TabIndex = 3;
-            grpPassword.TabStop = false;
-            grpPassword.Text = "Passwords";
-            // 
-            // panel1
-            // 
-            panel1.Controls.Add(btnPasswordEditor);
-            panel1.Controls.Add(cboPassword);
-            panel1.Location = new Point(76, 18);
-            panel1.Name = "panel1";
-            panel1.Size = new Size(242, 32);
-            panel1.TabIndex = 0;
-            // 
-            // btnPasswordEditor
-            // 
-            btnPasswordEditor.Location = new Point(160, 3);
-            btnPasswordEditor.Name = "btnPasswordEditor";
-            btnPasswordEditor.Size = new Size(75, 23);
-            btnPasswordEditor.TabIndex = 1;
-            btnPasswordEditor.Tag = "PasswordEditor";
-            btnPasswordEditor.Text = "&Edit";
-            btnPasswordEditor.UseVisualStyleBackColor = true;
-            // 
-            // cboPassword
-            // 
-            cboPassword.FormattingEnabled = true;
-            cboPassword.Location = new Point(3, 3);
-            cboPassword.Name = "cboPassword";
-            cboPassword.Size = new Size(139, 23);
-            cboPassword.TabIndex = 0;
-            cboPassword.Tag = "Password";
+            tvConfig.Dock = DockStyle.Left;
+            tvConfig.Location = new Point(0, 0);
+            tvConfig.Name = "tvConfig";
+            treeNode1.Name = "Node0";
+            treeNode1.Tag = "ucSecurity";
+            treeNode1.Text = "Security";
+            treeNode2.Name = "NodePaths";
+            treeNode2.Tag = "ucPaths";
+            treeNode2.Text = "Paths";
+            treeNode3.Name = "NodeDatabase";
+            treeNode3.Tag = "ucDatabase";
+            treeNode3.Text = "Database";
+            tvConfig.Nodes.AddRange(new TreeNode[] { treeNode1, treeNode2, treeNode3 });
+            tvConfig.Size = new Size(223, 580);
+            tvConfig.TabIndex = 3;
             // 
             // pnlConfigureButtons
             // 
             pnlConfigureButtons.Controls.Add(btnRead);
             pnlConfigureButtons.Controls.Add(btnCancel);
             pnlConfigureButtons.Controls.Add(btnSave);
-            pnlConfigureButtons.Location = new Point(67, 179);
+            pnlConfigureButtons.Location = new Point(28, 240);
             pnlConfigureButtons.Name = "pnlConfigureButtons";
             pnlConfigureButtons.Size = new Size(260, 30);
             pnlConfigureButtons.TabIndex = 1;
@@ -336,6 +197,7 @@ namespace ToolsUI.Config
             // 
             // grpDatabase
             // 
+            grpDatabase.Controls.Add(pnlConfigureButtons);
             grpDatabase.Controls.Add(numDbPort);
             grpDatabase.Controls.Add(btnTest);
             grpDatabase.Controls.Add(txtDbUser);
@@ -349,10 +211,9 @@ namespace ToolsUI.Config
             grpDatabase.Controls.Add(label12);
             grpDatabase.Controls.Add(label10);
             grpDatabase.Controls.Add(label11);
-            grpDatabase.Dock = DockStyle.Right;
-            grpDatabase.Location = new Point(397, 0);
+            grpDatabase.Location = new Point(238, 278);
             grpDatabase.Name = "grpDatabase";
-            grpDatabase.Size = new Size(329, 247);
+            grpDatabase.Size = new Size(329, 286);
             grpDatabase.TabIndex = 4;
             grpDatabase.TabStop = false;
             grpDatabase.Text = "Database";
@@ -487,7 +348,7 @@ namespace ToolsUI.Config
             pgeDiagnostics.Controls.Add(pnlDiagnostics);
             pgeDiagnostics.Location = new Point(4, 24);
             pgeDiagnostics.Name = "pgeDiagnostics";
-            pgeDiagnostics.Size = new Size(742, 502);
+            pgeDiagnostics.Size = new Size(1001, 586);
             pgeDiagnostics.TabIndex = 3;
             pgeDiagnostics.Text = "Diagnostics";
             pgeDiagnostics.UseVisualStyleBackColor = true;
@@ -500,7 +361,7 @@ namespace ToolsUI.Config
             pnlDiagnostics.Dock = DockStyle.Top;
             pnlDiagnostics.Location = new Point(0, 0);
             pnlDiagnostics.Name = "pnlDiagnostics";
-            pnlDiagnostics.Size = new Size(742, 499);
+            pnlDiagnostics.Size = new Size(1001, 499);
             pnlDiagnostics.TabIndex = 0;
             // 
             // pnlDiagnosticsRight
@@ -511,7 +372,7 @@ namespace ToolsUI.Config
             pnlDiagnosticsRight.Dock = DockStyle.Fill;
             pnlDiagnosticsRight.Location = new Point(187, 0);
             pnlDiagnosticsRight.Name = "pnlDiagnosticsRight";
-            pnlDiagnosticsRight.Size = new Size(555, 499);
+            pnlDiagnosticsRight.Size = new Size(814, 499);
             pnlDiagnosticsRight.TabIndex = 6;
             // 
             // pnlDetails
@@ -524,7 +385,7 @@ namespace ToolsUI.Config
             pnlDetails.Dock = DockStyle.Fill;
             pnlDetails.Location = new Point(0, 240);
             pnlDetails.Name = "pnlDetails";
-            pnlDetails.Size = new Size(555, 259);
+            pnlDetails.Size = new Size(814, 259);
             pnlDetails.TabIndex = 2;
             // 
             // txtRepair
@@ -533,7 +394,7 @@ namespace ToolsUI.Config
             txtRepair.Location = new Point(0, 195);
             txtRepair.Multiline = true;
             txtRepair.Name = "txtRepair";
-            txtRepair.Size = new Size(555, 60);
+            txtRepair.Size = new Size(814, 60);
             txtRepair.TabIndex = 4;
             // 
             // txtActual
@@ -542,7 +403,7 @@ namespace ToolsUI.Config
             txtActual.Location = new Point(0, 135);
             txtActual.Multiline = true;
             txtActual.Name = "txtActual";
-            txtActual.Size = new Size(555, 60);
+            txtActual.Size = new Size(814, 60);
             txtActual.TabIndex = 3;
             // 
             // txtExpected
@@ -551,7 +412,7 @@ namespace ToolsUI.Config
             txtExpected.Location = new Point(0, 75);
             txtExpected.Multiline = true;
             txtExpected.Name = "txtExpected";
-            txtExpected.Size = new Size(555, 60);
+            txtExpected.Size = new Size(814, 60);
             txtExpected.TabIndex = 2;
             // 
             // txtDescription
@@ -560,7 +421,7 @@ namespace ToolsUI.Config
             txtDescription.Location = new Point(0, 15);
             txtDescription.Multiline = true;
             txtDescription.Name = "txtDescription";
-            txtDescription.Size = new Size(555, 60);
+            txtDescription.Size = new Size(814, 60);
             txtDescription.TabIndex = 1;
             // 
             // lblTestName
@@ -580,7 +441,7 @@ namespace ToolsUI.Config
             pnlDiagnosticButtons.Dock = DockStyle.Top;
             pnlDiagnosticButtons.Location = new Point(0, 200);
             pnlDiagnosticButtons.Name = "pnlDiagnosticButtons";
-            pnlDiagnosticButtons.Size = new Size(555, 40);
+            pnlDiagnosticButtons.Size = new Size(814, 40);
             pnlDiagnosticButtons.TabIndex = 1;
             // 
             // btnRunGroup
@@ -611,7 +472,7 @@ namespace ToolsUI.Config
             lstDiagnosticsResults.IntegralHeight = false;
             lstDiagnosticsResults.Location = new Point(0, 0);
             lstDiagnosticsResults.Name = "lstDiagnosticsResults";
-            lstDiagnosticsResults.Size = new Size(555, 200);
+            lstDiagnosticsResults.Size = new Size(814, 200);
             lstDiagnosticsResults.TabIndex = 0;
             // 
             // tvDiagnostics
@@ -628,7 +489,7 @@ namespace ToolsUI.Config
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             CancelButton = btnCancel;
-            ClientSize = new Size(749, 298);
+            ClientSize = new Size(1077, 681);
             Controls.Add(tabConfig);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -638,13 +499,6 @@ namespace ToolsUI.Config
             tabConfig.ResumeLayout(false);
             pgeConfigure.ResumeLayout(false);
             pnlConfigure.ResumeLayout(false);
-            pnlConfigureGroups.ResumeLayout(false);
-            pnlCfgLeft.ResumeLayout(false);
-            grpPaths.ResumeLayout(false);
-            grpPaths.PerformLayout();
-            grpSecurity.ResumeLayout(false);
-            grpPassword.ResumeLayout(false);
-            panel1.ResumeLayout(false);
             pnlConfigureButtons.ResumeLayout(false);
             grpDatabase.ResumeLayout(false);
             grpDatabase.PerformLayout();
@@ -666,8 +520,6 @@ namespace ToolsUI.Config
         private Button btnCancel;
         private Button btnSave;
         private Button btnRead;
-        private Label label5;
-        private TextBox txtPath;
         private ComboBox cboEngines;
         private Label label8;
         private TextBox txtDbHost;
@@ -682,14 +534,9 @@ namespace ToolsUI.Config
         private Controls.NumericTextBox numDbPort;
         private Button btnTest;
         private TabPage pgeDiagnostics;
-        private Panel pnlConfigureGroups;
-        private GroupBox grpSecurity;
         private GroupBox grpDatabase;
-        private GroupBox grpPaths;
         private Panel pnlConfigure;
-        private Button btnBrowsePath;
         private Panel pnlDiagnostics;
-        private Panel pnlCfgLeft;
         private TreeView tvDiagnostics;
         private Panel pnlDiagnosticsRight;
         private ListBox lstDiagnosticsResults;
@@ -702,13 +549,7 @@ namespace ToolsUI.Config
         private TextBox txtExpected;
         private TextBox txtDescription;
         private Label lblTestName;
-        private GroupBox grpPassword;
-        private Panel panel1;
-        private Button btnPasswordEditor;
-        private ComboBox cboPassword;
-        private ComboBox cboPathName;
-        private Label label1;
-        private ComboBox cboPathType;
-        private Label label2;
+        private TreeView tvConfig;
+        private Panel pnlContent;
     }
 }

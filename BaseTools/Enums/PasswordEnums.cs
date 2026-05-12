@@ -5,7 +5,7 @@
  * File: PasswordEnums.cs
  * Version: 1.0.0
  * Created: 2026-04-04
- * Modified: 2026-05-03
+ * Modified: 2026-05-11
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -26,13 +26,6 @@ namespace Tools.Enums
         Hashed,
         Secret
     }
-    public enum PasswordStyles
-    {
-        Vault = 0,
-        Encrypted = 1,
-        PlainText = 2,
-        Prompt = 3
-    }
     public enum PasswordTarget
     {
         Application,
@@ -43,6 +36,6 @@ namespace Tools.Enums
     {
         Unknown,
         Vault,
-        Database
+        Inline
     }
 }

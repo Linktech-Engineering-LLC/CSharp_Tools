@@ -3,21 +3,24 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/DatabaseEngine.cs
  * File: DatabaseEngine.cs
+ * Version: 1.0.0
  * Created: 2026-03-31
- * Modified: 2026-04-01
+ * Modified: 2026-05-11
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
  */
+using LiteDB;
+using System;
 using System;
 using System.Collections.Generic;
+using System.Collections.Generic;
+using System.Linq;
 using System.Linq;
 using System.Text;
+using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Tools.Config
@@ -43,5 +46,23 @@ namespace Tools.Config
         public string Schema { get; set; }
         public string Instance { get; set; }
     }
+    public class DbConnection
+    {
+        [BsonField("Id")]
+        public string ConnectionId { get; set; } = string.Empty; // "Primary", "Archive", etc.
+        public DatabaseEngine Engine { get; set; }
 
+        public string Host { get; set; } = "localhost";
+        public int Port { get; set; } = 3306;
+
+        public string User { get; set; } = string.Empty;
+        public PasswordMetadata Password { get; set; } = new PasswordMetadata();
+
+        public string Schema { get; set; } = string.Empty;   // MySQL/MariaDB
+        public string Instance { get; set; } = string.Empty; // SQL Server/Oracle
+    }
+    public class DatabaseConfig
+    {
+        public List<DbConnection> Connections { get; set; } = [];
+    }
 }
