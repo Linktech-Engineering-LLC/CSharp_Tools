@@ -1,11 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: ToolsUI
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPasswordEditor.Designer.cs
  * File: UcPasswordEditor.Designer.cs
- * Version: 1.0.0
+ * Version: 1.0.1
  * Created: 2026-05-11
- * Modified: 2026-05-11
+ * Modified: 2026-05-13
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -71,7 +78,7 @@ namespace ToolsUI.UserControls
             lblTitle = new Label();
             panel1 = new Panel();
             label7 = new Label();
-            pnlEditor = new Panel();
+            pnlRoot = new Panel();
             pnlTarget.SuspendLayout();
             pnlStyle.SuspendLayout();
             pnlConfirm.SuspendLayout();
@@ -79,7 +86,7 @@ namespace ToolsUI.UserControls
             pnlCurrent.SuspendLayout();
             pnlButtons.SuspendLayout();
             panel1.SuspendLayout();
-            pnlEditor.SuspendLayout();
+            pnlRoot.SuspendLayout();
             SuspendLayout();
             // 
             // pnlTarget
@@ -88,13 +95,14 @@ namespace ToolsUI.UserControls
             pnlTarget.Controls.Add(label2);
             pnlTarget.Controls.Add(cboTarget);
             pnlTarget.Controls.Add(label1);
-            pnlTarget.Location = new Point(7, 28);
+            pnlTarget.Location = new Point(5, 28);
             pnlTarget.Name = "pnlTarget";
             pnlTarget.Size = new Size(429, 39);
             pnlTarget.TabIndex = 0;
             // 
             // cboContext
             // 
+            cboContext.DropDownStyle = ComboBoxStyle.DropDownList;
             cboContext.Enabled = false;
             cboContext.FormattingEnabled = true;
             cboContext.Location = new Point(274, 6);
@@ -136,13 +144,14 @@ namespace ToolsUI.UserControls
             pnlStyle.Controls.Add(cboRepresentation);
             pnlStyle.Controls.Add(chkVault);
             pnlStyle.Controls.Add(label3);
-            pnlStyle.Location = new Point(67, 68);
+            pnlStyle.Location = new Point(65, 68);
             pnlStyle.Name = "pnlStyle";
             pnlStyle.Size = new Size(309, 34);
             pnlStyle.TabIndex = 6;
             // 
             // cboRepresentation
             // 
+            cboRepresentation.DropDownStyle = ComboBoxStyle.DropDownList;
             cboRepresentation.FormattingEnabled = true;
             cboRepresentation.Location = new Point(166, 3);
             cboRepresentation.Name = "cboRepresentation";
@@ -176,7 +185,7 @@ namespace ToolsUI.UserControls
             pnlConfirm.Controls.Add(btnConfirm);
             pnlConfirm.Controls.Add(txtConfirm);
             pnlConfirm.Controls.Add(label4);
-            pnlConfirm.Location = new Point(46, 207);
+            pnlConfirm.Location = new Point(44, 207);
             pnlConfirm.Name = "pnlConfirm";
             pnlConfirm.Size = new Size(351, 34);
             pnlConfirm.TabIndex = 10;
@@ -215,7 +224,7 @@ namespace ToolsUI.UserControls
             pnlNew.Controls.Add(btnNew);
             pnlNew.Controls.Add(txtNew);
             pnlNew.Controls.Add(label5);
-            pnlNew.Location = new Point(46, 172);
+            pnlNew.Location = new Point(44, 172);
             pnlNew.Name = "pnlNew";
             pnlNew.Size = new Size(351, 34);
             pnlNew.TabIndex = 9;
@@ -254,16 +263,18 @@ namespace ToolsUI.UserControls
             pnlCurrent.Controls.Add(btnCurrent);
             pnlCurrent.Controls.Add(txtCurrent);
             pnlCurrent.Controls.Add(label6);
-            pnlCurrent.Location = new Point(46, 137);
+            pnlCurrent.Location = new Point(44, 137);
             pnlCurrent.Name = "pnlCurrent";
             pnlCurrent.Size = new Size(351, 34);
             pnlCurrent.TabIndex = 8;
             // 
             // btnCurrent
             // 
+            btnCurrent.AutoSize = true;
+            btnCurrent.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             btnCurrent.Location = new Point(257, 4);
             btnCurrent.Name = "btnCurrent";
-            btnCurrent.Size = new Size(75, 23);
+            btnCurrent.Size = new Size(48, 25);
             btnCurrent.TabIndex = 5;
             btnCurrent.Tag = "ShowCurrent";
             btnCurrent.Text = "Show";
@@ -334,7 +345,7 @@ namespace ToolsUI.UserControls
             pnlButtons.Controls.Add(btnRemove);
             pnlButtons.Controls.Add(btnCancel);
             pnlButtons.Controls.Add(btnUpdate);
-            pnlButtons.Location = new Point(97, 242);
+            pnlButtons.Location = new Point(95, 242);
             pnlButtons.Name = "pnlButtons";
             pnlButtons.Size = new Size(248, 31);
             pnlButtons.TabIndex = 11;
@@ -342,7 +353,7 @@ namespace ToolsUI.UserControls
             // lblTitle
             // 
             lblTitle.AutoSize = true;
-            lblTitle.Location = new Point(174, 6);
+            lblTitle.Location = new Point(172, 6);
             lblTitle.Name = "lblTitle";
             lblTitle.Size = new Size(95, 15);
             lblTitle.TabIndex = 12;
@@ -352,7 +363,7 @@ namespace ToolsUI.UserControls
             // 
             panel1.Controls.Add(txtKey);
             panel1.Controls.Add(label7);
-            panel1.Location = new Point(108, 102);
+            panel1.Location = new Point(106, 102);
             panel1.Name = "panel1";
             panel1.Size = new Size(227, 34);
             panel1.TabIndex = 13;
@@ -366,31 +377,33 @@ namespace ToolsUI.UserControls
             label7.TabIndex = 3;
             label7.Text = "Key";
             // 
-            // pnlEditor
+            // pnlRoot
             // 
-            pnlEditor.Controls.Add(lblTitle);
-            pnlEditor.Controls.Add(panel1);
-            pnlEditor.Controls.Add(pnlTarget);
-            pnlEditor.Controls.Add(pnlStyle);
-            pnlEditor.Controls.Add(pnlButtons);
-            pnlEditor.Controls.Add(pnlCurrent);
-            pnlEditor.Controls.Add(pnlConfirm);
-            pnlEditor.Controls.Add(pnlNew);
-            pnlEditor.Dock = DockStyle.Fill;
-            pnlEditor.Location = new Point(0, 0);
-            pnlEditor.Name = "pnlEditor";
-            pnlEditor.Size = new Size(443, 278);
-            pnlEditor.TabIndex = 14;
+            pnlRoot.AutoSize = true;
+            pnlRoot.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            pnlRoot.Controls.Add(lblTitle);
+            pnlRoot.Controls.Add(pnlCurrent);
+            pnlRoot.Controls.Add(panel1);
+            pnlRoot.Controls.Add(pnlButtons);
+            pnlRoot.Controls.Add(pnlTarget);
+            pnlRoot.Controls.Add(pnlConfirm);
+            pnlRoot.Controls.Add(pnlNew);
+            pnlRoot.Controls.Add(pnlStyle);
+            pnlRoot.Location = new Point(3, 3);
+            pnlRoot.Name = "pnlRoot";
+            pnlRoot.Size = new Size(437, 276);
+            pnlRoot.TabIndex = 14;
             // 
             // UcPasswordEditor
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
             BorderStyle = BorderStyle.Fixed3D;
-            Controls.Add(pnlEditor);
+            Controls.Add(pnlRoot);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             Name = "UcPasswordEditor";
-            Size = new Size(443, 278);
+            Size = new Size(452, 287);
             pnlTarget.ResumeLayout(false);
             pnlTarget.PerformLayout();
             pnlStyle.ResumeLayout(false);
@@ -404,9 +417,10 @@ namespace ToolsUI.UserControls
             pnlButtons.ResumeLayout(false);
             panel1.ResumeLayout(false);
             panel1.PerformLayout();
-            pnlEditor.ResumeLayout(false);
-            pnlEditor.PerformLayout();
+            pnlRoot.ResumeLayout(false);
+            pnlRoot.PerformLayout();
             ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
@@ -441,6 +455,6 @@ namespace ToolsUI.UserControls
         private Panel panel1;
         private TextBox txtKey;
         private Label label7;
-        private Panel pnlEditor;
+        private Panel pnlRoot;
     }
 }

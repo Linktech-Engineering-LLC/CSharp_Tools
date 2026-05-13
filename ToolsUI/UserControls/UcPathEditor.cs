@@ -1,11 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: ToolsUI
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPathEditor.cs
  * File: UcPathEditor.cs
- * Version: 1.0.0
+ * Version: 1.0.1
  * Created: 2026-05-11
- * Modified: 2026-05-11
+ * Modified: 2026-05-13
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -27,7 +34,7 @@ using Tools.Enums;
 #endregion
 namespace ToolsUI.UserControls
 {
-    public partial class UcPathEditor : UserControl
+    public partial class UcPathEditor : EditorBase
     {
         #region Private Fields
         private SettingsModel _settings;
@@ -40,10 +47,11 @@ namespace ToolsUI.UserControls
         }
         #endregion
         #region Public Properties/Methods
-        public event EventHandler CloseRequested;
         public SettingsModel CurrentSettings { get; set; }
-        #endregion
-        #region Private Helpers
+        public override Size GetPreferredSize(Size proposedSize)
+        {
+            return pnlRoot.Size;
+        }
         public void Initialize(PathLocation loc, SettingsModel settings)
         {
             _settings = settings;
@@ -56,6 +64,8 @@ namespace ToolsUI.UserControls
             btnCancel.Click += Button_Click;
             btnRemove.Click += Button_Click;
         }
+        #endregion
+        #region Private Helpers
         private void PopulateCombos()
         {
             cboPathName.DataSource = Enum.GetValues(typeof(PathLocation));
@@ -63,7 +73,7 @@ namespace ToolsUI.UserControls
         }
         private void ReloadMetadata()
         {
-            var ap = _settings.Paths.FirstOrDefault(p => p.PathName == _loc.ToString());
+            var ap = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
             if (ap == null)
                 return;
 
@@ -89,7 +99,7 @@ namespace ToolsUI.UserControls
                         }
                         break;
                     case "Update":
-                        var ap = _settings.Paths.FirstOrDefault(p => p.PathName == _loc.ToString());
+                        var ap = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
                         if (ap != null)
                         {
                             ap.PathType = (PathType)cboPathType.SelectedItem;
@@ -99,22 +109,22 @@ namespace ToolsUI.UserControls
                         {
                             _settings.Paths.Add(new AppPath()
                             {
-                                PathName = _loc.ToString(),
+                                PathName = _loc,
                                 PathType = (PathType)cboPathType.SelectedItem,
                                 PathValue = txtPath.Text
                             });
                         }
-                        CloseRequested?.Invoke(this, EventArgs.Empty);
+                        RequestClose();
                         break;
                     case "Cancel":
-                        CloseRequested?.Invoke(this, EventArgs.Empty);
+                        RequestClose();
                         break;
                     case "Remove":
-                        var apRemove = _settings.Paths.FirstOrDefault(p => p.PathName == _loc.ToString());
+                        AppPath? apRemove = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
                         if (apRemove != null)
                         {
                             _settings.Paths.Remove(apRemove);
-                            CloseRequested?.Invoke(this, EventArgs.Empty);
+                            RequestClose();
                         }
                         break;
                 }

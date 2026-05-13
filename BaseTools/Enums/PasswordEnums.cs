@@ -1,11 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: BaseTools
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Enums/PasswordEnums.cs
  * File: PasswordEnums.cs
- * Version: 1.0.0
+ * Version: 1.0.1
  * Created: 2026-04-04
- * Modified: 2026-05-11
+ * Modified: 2026-05-12
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -30,6 +37,9 @@ namespace Tools.Enums
     {
         Application,
         Configuration,
+        Diagnostics,
+        Archiving,
+        Historical,
         Database
     }
     public enum PasswordLocation

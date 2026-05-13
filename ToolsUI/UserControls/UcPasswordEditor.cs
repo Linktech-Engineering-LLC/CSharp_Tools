@@ -1,11 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: ToolsUI
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPasswordEditor.cs
  * File: UcPasswordEditor.cs
- * Version: 1.0.0
+ * Version: 1.0.1
  * Created: 2026-05-11
- * Modified: 2026-05-11
+ * Modified: 2026-05-13
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -24,17 +31,19 @@ using System.Windows.Forms;
 #endregion
 #region Project Libraries
 using Tools.Config;
+using Tools.Converters;
 using Tools.Enums;
 using ToolsUI.Config;
 #endregion
 
 namespace ToolsUI.UserControls
 {
-    public partial class UcPasswordEditor : UserControl
+    public partial class UcPasswordEditor : EditorBase
     {
         #region Private Fields
         private PasswordTarget _currentTarget;
         private string? _currentConnectionId;
+        private DbConnection? _currentConnection; // only relevant for Database target
         private PasswordMetadata? _initialData;
         private PasswordMetadata? LoadedMetadata;
         private bool _isVaultMode;
@@ -50,118 +59,27 @@ namespace ToolsUI.UserControls
         #endregion
         #region Public Properties/Methods
         public SettingsModel CurrentSettings { get; set; }
+        public override Size GetPreferredSize(Size proposedSize)
+        {
+            return pnlRoot.Size;
+        }
         public PasswordTarget SelectedTarget {  get; set; }
-        public event EventHandler CloseRequested;
-        #endregion
-        #region Private Helpers
-        private PasswordMetadata BuildMetadataFromUI(PasswordMetadata existing)
-        {
-            // Determine final password value
-            string newPassword =
-                !string.IsNullOrEmpty(txtNew.Text)
-                    ? txtNew.Text
-                    : txtCurrent.Text;
-
-            // Editable metadata key
-            string newMetaKey = txtKey.Text;
-
-            var meta = new PasswordMetadata
-            {
-                Key = newMetaKey
-            };
-
-            if (chkVault.Checked)
-            {
-                // Determine vault key
-                string vaultKey;
-
-                if (existing.Location == PasswordLocation.Vault)
-                {
-                    // Reuse existing vault key
-                    vaultKey = existing.Password;
-                }
-                else
-                {
-                    // Generate a new vault key based on the target
-                    vaultKey = GenerateVaultKey(_currentTarget);
-                }
-
-                // --- ORPHAN CLEANUP (correct placement) ---
-                // If the old metadata was vault-based and the vault key changed,
-                // delete the old vault entry.
-                if (existing.Location == PasswordLocation.Vault &&
-                    existing.Password != vaultKey)
-                {
-                    Vault.Delete(existing.Password);
-                }
-
-                // Write password into vault if changed
-                if (Vault.Read(vaultKey) != newPassword)
-                    Vault.Write(vaultKey, newPassword);
-
-                meta.Location = PasswordLocation.Vault;
-                meta.Representation = PasswordRepresentation.Secret;
-                meta.Password = vaultKey; // store vault key, not password
-            }
-            else
-            {
-                // Inline mode
-                meta.Location = PasswordLocation.Inline;
-                meta.Representation = (PasswordRepresentation)cboRepresentation.SelectedItem!;
-                meta.Password = newPassword;
-            }
-
-            return meta;
-        }
-        private string GenerateVaultKey(PasswordTarget target) => target switch
-        {
-            PasswordTarget.Database => $"{Application.ProductName}.dbengine",
-            PasswordTarget.Application => $"{Application.ProductName}.app",
-            PasswordTarget.Configuration => $"{Application.ProductName}.config",
-            _ => $"{Application.ProductName}.password"
-        };
-        private PasswordMetadata GetMetadata(PasswordTarget target, string? connectionId)
-        {
-            switch (target)
-            {
-                case PasswordTarget.Application:
-                    return CurrentSettings.Passwords
-                        .FirstOrDefault(p => p.Key == "App")
-                        ?? new PasswordMetadata { Key = "App" };
-
-                case PasswordTarget.Configuration:
-                    return CurrentSettings.Passwords
-                        .FirstOrDefault(p => p.Key == "Config")
-                        ?? new PasswordMetadata { Key = "Config" };
-
-                case PasswordTarget.Database:
-                    if (string.IsNullOrWhiteSpace(connectionId))
-                        return new PasswordMetadata { Key = "Db" };
-
-                    var conn = CurrentSettings.Database.Connections
-                        .FirstOrDefault(c => c.ConnectionId == connectionId);
-
-                    if (conn == null)
-                        return new PasswordMetadata { Key = $"Db:{connectionId}" };
-
-                    // DB passwords are stored directly on the connection
-                    return conn.Password ?? new PasswordMetadata { Key = $"Db:{connectionId}" };
-
-                default:
-                    return new PasswordMetadata();
-            }
-        }
         public void Initialize(PasswordTarget target, string? connectionId = null)
         {
             _currentTarget = target;
-            _currentConnectionId = connectionId;
 
+            if (connectionId != null)
+            {
+                _currentConnectionId = connectionId;
+                _currentConnection = CurrentSettings.Database.Connections.FirstOrDefault(c => c.ConnectionId == connectionId);
+            }
             // This triggers the Target handler, which will populate the context list
             cboTarget.SelectedItem = target;
 
             // DO NOT set cboContext.SelectedItem or SelectedValue here
 
             LoadMetadata(GetMetadata(_currentTarget, _currentConnectionId));
+
         }
         public void LoadMetadata(PasswordMetadata meta)
         {
@@ -203,6 +121,136 @@ namespace ToolsUI.UserControls
             if (_currentTarget == PasswordTarget.Database && _currentConnectionId != null)
             {
                 cboContext.SelectedValue = _currentConnectionId;
+            }
+        }
+        #endregion
+        #region Private Helpers
+        private void ApplyRepresentationLogic(PasswordMetadata meta, PasswordTarget target, string plaintext)
+        {
+            switch (meta.Location)
+            {
+                case PasswordLocation.Vault:
+                    SaveVaultPassword(target, plaintext, meta);
+                    break;
+
+                case PasswordLocation.Inline:
+                    switch (meta.Representation)
+                    {
+                        case PasswordRepresentation.Plaintext:
+                            SaveInlinePlaintext(plaintext, meta);
+                            break;
+
+                        case PasswordRepresentation.Hashed:
+                            SaveInlineHashed(plaintext, meta);
+                            break;
+
+                        case PasswordRepresentation.Encrypted:
+                            SaveEncryptedInlinePassword(target, plaintext, meta);
+                            break;
+                    }
+                    break;
+            }
+        }
+        private PasswordMetadata BuildMetadataFromUI(PasswordMetadata existing)
+        {
+            // Determine final password value
+            string newPassword =
+                !string.IsNullOrEmpty(txtNew.Text)
+                    ? txtNew.Text
+                    : txtCurrent.Text;
+
+            // Editable metadata key
+            string newMetaKey = txtKey.Text;
+
+            var meta = new PasswordMetadata
+            {
+                Key = newMetaKey
+            };
+
+            if (chkVault.Checked)
+            {
+                // Determine vault key
+                string vaultKey;
+
+                if (existing.Location == PasswordLocation.Vault)
+                {
+                    // Reuse existing vault key
+                    vaultKey = existing.Password;
+                }
+                else
+                {
+                    // Generate vault key based on target
+                    vaultKey = _currentTarget == PasswordTarget.Database
+                        ? GenerateDbVaultKey(_currentConnection)
+                        : GenerateVaultKey(_currentTarget);
+                }
+
+                // --- ORPHAN CLEANUP (correct placement) ---
+                // If the old metadata was vault-based and the vault key changed,
+                // delete the old vault entry.
+                if (existing.Location == PasswordLocation.Vault &&
+                    existing.Password != vaultKey)
+                {
+                    Vault.Delete(existing.Password);
+                }
+
+                // Write password into vault if changed
+                if (Vault.Read(vaultKey) != newPassword)
+                    Vault.Write(vaultKey, newPassword);
+
+                meta.Location = PasswordLocation.Vault;
+                meta.Representation = PasswordRepresentation.Secret;
+                meta.Password = vaultKey; // store vault key, not password
+            }
+            else
+            {
+                // Inline mode
+                meta.Location = PasswordLocation.Inline;
+                meta.Representation = (PasswordRepresentation)cboRepresentation.SelectedItem!;
+                meta.Password = newPassword;
+            }
+
+            return meta;
+        }
+        private string GenerateDbVaultKey(DbConnection conn) => $"{Application.ProductName}.{conn.Engine}";
+        private string GenerateVaultKey(PasswordTarget target) => target switch
+        {
+            PasswordTarget.Application => $"{Application.ProductName}.app",
+            PasswordTarget.Configuration => $"{Application.ProductName}.config",
+            PasswordTarget.Diagnostics => $"{Application.ProductName}.diag",
+            PasswordTarget.Archiving => $"{Application.ProductName}.arch",
+            PasswordTarget.Historical => $"{Application.ProductName}.hist",
+            _ => $"{Application.ProductName}.password"
+        };
+        private PasswordMetadata GetMetadata(PasswordTarget target, string? connectionId)
+        {
+            switch (target)
+            {
+                case PasswordTarget.Application:
+                    return CurrentSettings.Passwords
+                        .FirstOrDefault(p => p.Key == "App")
+                        ?? new PasswordMetadata { Key = "App" };
+
+                case PasswordTarget.Configuration:
+                    return CurrentSettings.Passwords
+                        .FirstOrDefault(p => p.Key == "Config")
+                        ?? new PasswordMetadata { Key = "Config" };
+
+                case PasswordTarget.Database:
+                    if (string.IsNullOrWhiteSpace(connectionId))
+                        return new PasswordMetadata { Key = "Db" };
+
+                    DbConnection? conn = CurrentSettings.Database.Connections
+                        .FirstOrDefault(c => c.ConnectionId == connectionId);
+
+                    if (conn == null)
+                        return new PasswordMetadata { Key = $"Db:{connectionId}" };
+
+                    // DB passwords are stored directly on the connection
+                    return conn.Password ?? new PasswordMetadata { Key = $"Db:{connectionId}" };
+
+                default:
+                    return new PasswordMetadata();
             }
         }
         private void PopulateContextList()
@@ -251,6 +299,25 @@ namespace ToolsUI.UserControls
                     break;
             }
         }
+        private void SaveEncryptedInlinePassword(PasswordTarget target, string plaintextPassword, PasswordMetadata meta)
+        {
+            // 1. Derive vault key name
+            string encKeyName = GenerateVaultKey(target) + ".enc";
+
+            // 2. Generate new encryption key
+            string encryptionKey = Crypto.GenerateKeyString();
+
+            // 3. Store encryption key in vault
+            Vault.Write(encKeyName, encryptionKey);
+
+            // 4. Encrypt password
+            string encryptedBlob = MySqlCrypto.Encrypt(plaintextPassword, encryptionKey);
+
+            // 5. Update metadata
+            meta.Password = encryptedBlob;
+            meta.Location = PasswordLocation.Inline;
+            meta.Representation = PasswordRepresentation.Encrypted;
+        }
         private void SaveMetadata(PasswordMetadata meta, PasswordTarget target, string? connectionId)
         {
             switch (target)
@@ -274,6 +341,34 @@ namespace ToolsUI.UserControls
 
                     break;
             }
+        }
+        private void SaveInlineHashed(string plaintext, PasswordMetadata meta)
+        {
+            // Whatever hashing function you already use
+            string hash = Crypto.HashPassword(plaintext);
+
+            meta.Password = hash;
+            meta.Location = PasswordLocation.Inline;
+            meta.Representation = PasswordRepresentation.Hashed;
+        }
+        private void SaveInlinePlaintext(string plaintext, PasswordMetadata meta)
+        {
+            meta.Password = plaintext;
+            meta.Location = PasswordLocation.Inline;
+            meta.Representation = PasswordRepresentation.Plaintext;
+        }
+        private void SaveVaultPassword(PasswordTarget target, string plaintext, PasswordMetadata meta)
+        {
+            // 1. Determine vault key name
+            string vaultKeyName = GenerateVaultKey(target);
+
+            // 2. Write the real password to the vault
+            Vault.Write(vaultKeyName, plaintext);
+
+            // 3. Update metadata to reference vault mode
+            meta.Password = vaultKeyName;
+            meta.Location = PasswordLocation.Vault;
+            meta.Representation = PasswordRepresentation.Plaintext;
         }
         private void TogglePassword(TextBox txt, Button btn)
         {
@@ -337,26 +432,30 @@ namespace ToolsUI.UserControls
                             return;
 
                         // Load existing metadata (App/Config or DB)
-                        var existing = GetMetadata(_currentTarget, _currentConnectionId);
+                        PasswordMetadata existing = GetMetadata(_currentTarget, _currentConnectionId);
 
                         // Build updated metadata using vault/inline rules
-                        var updated = BuildMetadataFromUI(existing);
+                        PasswordMetadata updated = BuildMetadataFromUI(existing);
+
+                        // NEW: Apply encryption / hashing / vault logic
+                        string plaintext = txtNew.Text.Length > 0 ? txtNew.Text : txtCurrent.Text;
+                        ApplyRepresentationLogic(updated, _currentTarget, plaintext);
 
                         // Save to correct location in SettingsModel
                         SaveMetadata(updated, _currentTarget, _currentConnectionId);
 
                         // Refresh UI
                         LoadMetadata(GetMetadata(_currentTarget, _currentConnectionId));
-                        CloseRequested?.Invoke(this, EventArgs.Empty);
+                        RequestClose();
                         break;
                     case "Cancel":
                         LoadMetadata(GetMetadata(_currentTarget, _currentConnectionId)); // reload from settings
-                        CloseRequested?.Invoke(this, EventArgs.Empty);
+                        RequestClose();
                         break;
                     case "Remove":
                         RemoveMetadata(_currentTarget, _currentConnectionId);
                         LoadMetadata(GetMetadata(_currentTarget, _currentConnectionId));
-                        CloseRequested?.Invoke(this, EventArgs.Empty);
+                        RequestClose();
                         break;
                 }
             }

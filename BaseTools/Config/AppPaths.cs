@@ -1,11 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: BaseTools
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/AppPaths.cs
  * File: AppPaths.cs
- * Version: 1.0.0
+ * Version: 1.0.1
  * Created: 2026-05-01
- * Modified: 2026-05-03
+ * Modified: 2026-05-13
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -39,7 +46,7 @@ namespace Tools.Config
     }
     public class AppPath
     {
-        public string PathName { get; set; } = string.Empty;
+        public PathLocation PathName { get; set; }
         public PathType PathType { get; set; } = PathType.LocalDrive;
         public string PathValue { get; set; } = string.Empty;
     }

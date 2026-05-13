@@ -1,11 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: BaseTools
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/DatabaseEngine.cs
  * File: DatabaseEngine.cs
- * Version: 1.0.0
+ * Version: 1.0.1
  * Created: 2026-03-31
- * Modified: 2026-05-11
+ * Modified: 2026-05-13
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -65,4 +72,22 @@ namespace Tools.Config
     {
         public List<DbConnection> Connections { get; set; } = [];
     }
+    public static class DatabaseEngineExtensions
+    {
+        public static int GetDefaultPort(this DatabaseEngine engine)
+        {
+            return engine switch
+            {
+                DatabaseEngine.MariaDB => 3306,
+                DatabaseEngine.MySQL => 3306,
+                DatabaseEngine.PostgreSql => 5432,
+                DatabaseEngine.SQLServer => 1433,
+                DatabaseEngine.Oracle => 1521,
+                DatabaseEngine.SQLite => 0,   // no port
+                DatabaseEngine.DBLite => 0,   // no port
+                _ => 0
+            };
+        }
+    }
+
 }
