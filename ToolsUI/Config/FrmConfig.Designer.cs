@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmConfig.Designer.cs
  * File: FrmConfig.Designer.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: None
- * Modified: 2026-05-13
+ * Modified: 2026-05-14
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -55,7 +55,11 @@ namespace ToolsUI.Config
             pnlContent = new Panel();
             tvConfig = new TreeView();
             toolTip1 = new ToolTip(components);
+            btnClose = new Button();
+            btnSave = new Button();
+            pnlButtons = new Panel();
             pnlConfigure.SuspendLayout();
+            pnlButtons.SuspendLayout();
             SuspendLayout();
             // 
             // pnlConfigure
@@ -64,7 +68,7 @@ namespace ToolsUI.Config
             pnlConfigure.Controls.Add(tvConfig);
             pnlConfigure.Location = new Point(1, 3);
             pnlConfigure.Name = "pnlConfigure";
-            pnlConfigure.Size = new Size(568, 358);
+            pnlConfigure.Size = new Size(418, 261);
             pnlConfigure.TabIndex = 3;
             // 
             // pnlContent
@@ -73,9 +77,9 @@ namespace ToolsUI.Config
             pnlContent.AutoSize = true;
             pnlContent.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             pnlContent.Dock = DockStyle.Fill;
-            pnlContent.Location = new Point(223, 0);
+            pnlContent.Location = new Point(192, 0);
             pnlContent.Name = "pnlContent";
-            pnlContent.Size = new Size(345, 358);
+            pnlContent.Size = new Size(226, 261);
             pnlContent.TabIndex = 4;
             // 
             // tvConfig
@@ -93,16 +97,51 @@ namespace ToolsUI.Config
             treeNode3.Tag = "ucDatabase";
             treeNode3.Text = "Database";
             tvConfig.Nodes.AddRange(new TreeNode[] { treeNode1, treeNode2, treeNode3 });
-            tvConfig.Size = new Size(223, 358);
+            tvConfig.Size = new Size(192, 261);
             tvConfig.TabIndex = 3;
+            // 
+            // btnClose
+            // 
+            btnClose.Location = new Point(84, 5);
+            btnClose.Name = "btnClose";
+            btnClose.Size = new Size(75, 23);
+            btnClose.TabIndex = 1;
+            btnClose.Tag = "Close";
+            btnClose.Text = "&Close";
+            toolTip1.SetToolTip(btnClose, "Cancels any changes to the configuration and closes the form");
+            btnClose.UseVisualStyleBackColor = true;
+            // 
+            // btnSave
+            // 
+            btnSave.Location = new Point(3, 5);
+            btnSave.Name = "btnSave";
+            btnSave.Size = new Size(75, 23);
+            btnSave.TabIndex = 0;
+            btnSave.Tag = "Save";
+            btnSave.Text = "Sa&ve";
+            toolTip1.SetToolTip(btnSave, "Accepts the Configuration Modifications and Saves the Results");
+            btnSave.UseVisualStyleBackColor = true;
+            // 
+            // pnlButtons
+            // 
+            pnlButtons.Controls.Add(btnClose);
+            pnlButtons.Controls.Add(btnSave);
+            pnlButtons.Location = new Point(127, 270);
+            pnlButtons.Name = "pnlButtons";
+            pnlButtons.Size = new Size(167, 33);
+            pnlButtons.TabIndex = 4;
             // 
             // FrmConfig
             // 
+            AcceptButton = btnSave;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             AutoSize = true;
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            ClientSize = new Size(581, 390);
+            CancelButton = btnClose;
+            ClientSize = new Size(425, 305);
+            ControlBox = false;
+            Controls.Add(pnlButtons);
             Controls.Add(pnlConfigure);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -111,6 +150,7 @@ namespace ToolsUI.Config
             Text = "FrmConfig";
             pnlConfigure.ResumeLayout(false);
             pnlConfigure.PerformLayout();
+            pnlButtons.ResumeLayout(false);
             ResumeLayout(false);
         }
 
@@ -119,5 +159,8 @@ namespace ToolsUI.Config
         private Panel pnlConfigure;
         private TreeView tvConfig;
         private Panel pnlContent;
+        private Panel pnlButtons;
+        private Button btnClose;
+        private Button btnSave;
     }
 }

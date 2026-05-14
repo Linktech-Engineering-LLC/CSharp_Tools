@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPathEditor.Designer.cs
  * File: UcPathEditor.Designer.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: 2026-05-11
- * Modified: 2026-05-13
+ * Modified: 2026-05-14
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -242,7 +242,7 @@ namespace ToolsUI.UserControls
             BorderStyle = BorderStyle.Fixed3D;
             Controls.Add(pnlRoot);
             Name = "UcPathEditor";
-            Size = new Size(342, 191);
+            Size = new Size(322, 182);
             pnlButtons.ResumeLayout(false);
             panel2.ResumeLayout(false);
             panel2.PerformLayout();

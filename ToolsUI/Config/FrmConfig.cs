@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmConfig.cs
  * File: FrmConfig.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: 2026-03-31
- * Modified: 2026-05-13
+ * Modified: 2026-05-14
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -76,18 +76,58 @@ namespace ToolsUI.Config
                 editor.Dispose();
             };
         }
+        private void AttachRefreshHandler(EditorBase editor)
+        {
+            editor.RefreshRequested += (s, e) =>
+            {
+                // Rebuild the tree
+                ReloadTree();
+
+                // Re-run the AfterSelect logic on the same node
+                if (tvConfig.SelectedNode != null)
+                {
+                    TvConfig_AfterSelect(tvConfig, new TreeViewEventArgs(tvConfig.SelectedNode));
+                }
+            };
+        }
         private void AdjustFormSize(UserControl editor)
         {
-            // Base padding for borders and spacing
             const int horizontalPadding = 20;
             const int verticalPadding = 30;
+            const int buttonSpacing = 12;   // space between pnlConfigure and pnlButtons
+            const int bottomPadding = 20;   // space below buttons
+
+            // Preferred size of the editor
             Size pref = editor.GetPreferredSize(Size.Empty);
 
-            int requiredWidth = tvConfig.Width + pref.Width + horizontalPadding;
-            int requiredHeight = Math.Max(pref.Height + verticalPadding, MinimumSize.Height);
+            // Width: tree + editor + padding
+            int requiredWidth =
+                tvConfig.Width +
+                pref.Width +
+                horizontalPadding;
 
-            // Resize form to fit editor comfortably
-            pnlConfigure.Size = new Size(requiredWidth, requiredHeight);
+            // Height of the configure panel (tree + editor area)
+            int configureHeight =
+                Math.Max(pref.Height + verticalPadding, pnlConfigure.MinimumSize.Height);
+
+            // Apply to pnlConfigure
+            pnlConfigure.Size = new Size(requiredWidth, configureHeight);
+
+            // Now compute total form client height: configure + spacing + buttons + bottom padding
+            int totalClientHeight =
+                pnlConfigure.Height +
+                buttonSpacing +
+                pnlButtons.Height +
+                bottomPadding;
+
+            // Set form client size
+            this.ClientSize = new Size(requiredWidth, Math.Max(totalClientHeight, this.MinimumSize.Height));
+
+            // Center pnlButtons on the form (or pnlConfigure width, they match now)
+            pnlButtons.Location = new Point(
+                (this.ClientSize.Width - pnlButtons.Width) / 2,
+                pnlConfigure.Bottom + buttonSpacing
+            );
         }
         private void BuildConfigTree()
         {
@@ -162,6 +202,9 @@ namespace ToolsUI.Config
         }
         private void InitializeControls()
         {
+            Text = $"{AppName} Records Configuration Manager";
+            btnClose.Click += Button_Click;
+            btnSave.Click += Button_Click;
             Load += FormLoad;
         }
         private void LoadControl(UserControl ctrl)
@@ -180,6 +223,7 @@ namespace ToolsUI.Config
                 CurrentSettings = _settings
             };
             AttachCloseHandler(editor);
+            AttachRefreshHandler(editor);
             editor.Initialize(conn);
             LoadControl(editor);
         }
@@ -190,6 +234,7 @@ namespace ToolsUI.Config
                 CurrentSettings = _settings
             };
             AttachCloseHandler(editor);
+            AttachRefreshHandler(editor);
             editor.Initialize(target, connectionId);
 
             LoadControl(editor);
@@ -201,10 +246,11 @@ namespace ToolsUI.Config
                 CurrentSettings = _settings
             };
             AttachCloseHandler(editor);
+            AttachRefreshHandler(editor);
             editor.Initialize(loc, _settings);
             LoadControl(editor);
         }
-        private void RefreshTree()
+        private void ReloadTree()
         {
             tvConfig.Nodes.Clear();
             BuildConfigTree();   // your existing builder
@@ -230,6 +276,23 @@ namespace ToolsUI.Config
         }
         #endregion
         #region Private Form Methods
+        private void Button_Click(object sender, EventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string tag)
+            {
+                switch (tag)
+                {
+                    case "Save":
+                        //ConfigManager.Save(AppName, _settings);
+                        MessageBox.Show("Configuration saved successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        this.Close();
+                        break;
+                    case "Cancel":
+                        this.Close();
+                        break;
+                }
+            }
+        }
         private void FormLoad(object sender, EventArgs e)
         {
             // Load settings

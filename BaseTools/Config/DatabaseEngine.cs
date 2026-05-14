@@ -10,9 +10,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/DatabaseEngine.cs
  * File: DatabaseEngine.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: 2026-03-31
- * Modified: 2026-05-13
+ * Modified: 2026-05-14
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -67,9 +67,17 @@ namespace Tools.Config
 
         public string Schema { get; set; } = string.Empty;   // MySQL/MariaDB
         public string Instance { get; set; } = string.Empty; // SQL Server/Oracle
+         
+        // Overrides
+        public bool? EnablePooling { get; set; }
+        public int? Timeout { get; set; }
+        public bool? EncryptConnection { get; set; }
     }
     public class DatabaseConfig
     {
+        public bool EnablePooling { get; set; } = true;
+        public int DefaultTimeout { get; set; } = 30;
+        public bool EncryptConnections { get; set; } = false;
         public List<DbConnection> Connections { get; set; } = [];
     }
     public static class DatabaseEngineExtensions

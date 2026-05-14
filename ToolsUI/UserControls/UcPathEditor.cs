@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPathEditor.cs
  * File: UcPathEditor.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: 2026-05-11
- * Modified: 2026-05-13
+ * Modified: 2026-05-14
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -114,7 +114,7 @@ namespace ToolsUI.UserControls
                                 PathValue = txtPath.Text
                             });
                         }
-                        RequestClose();
+                        RequestRefresh();
                         break;
                     case "Cancel":
                         RequestClose();
@@ -124,7 +124,7 @@ namespace ToolsUI.UserControls
                         if (apRemove != null)
                         {
                             _settings.Paths.Remove(apRemove);
-                            RequestClose();
+                            RequestRefresh();
                         }
                         break;
                 }

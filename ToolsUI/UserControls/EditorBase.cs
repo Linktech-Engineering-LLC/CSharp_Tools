@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/EditorBase.cs
  * File: EditorBase.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: 2026-05-13
- * Modified: 2026-05-13
+ * Modified: 2026-05-14
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -31,8 +31,13 @@ namespace ToolsUI.UserControls
 {
     public partial class EditorBase : UserControl
     {
+        public event EventHandler? RefreshRequested;
         public event EventHandler CloseRequested;
 
+        protected void RequestRefresh()
+        {
+            RefreshRequested?.Invoke(this, EventArgs.Empty);
+        }
         protected void RequestClose()
         {
             CloseRequested?.Invoke(this, EventArgs.Empty);
