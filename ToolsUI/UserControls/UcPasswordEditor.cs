@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPasswordEditor.cs
  * File: UcPasswordEditor.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: 2026-05-11
- * Modified: 2026-05-13
+ * Modified: 2026-05-19
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -25,6 +25,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -47,8 +48,6 @@ namespace ToolsUI.UserControls
         private PasswordMetadata? _initialData;
         private PasswordMetadata? LoadedMetadata;
         private bool _isVaultMode;
-        private string? _vaultKey;
-        private string? _recoveredPassword;
         #endregion
         #region Constructors/Destructors
         public UcPasswordEditor()
@@ -79,136 +78,179 @@ namespace ToolsUI.UserControls
             // DO NOT set cboContext.SelectedItem or SelectedValue here
 
             LoadMetadata(GetMetadata(_currentTarget, _currentConnectionId));
-
         }
         public void LoadMetadata(PasswordMetadata meta)
         {
+            // Backward compatibility: auto-populate EncryptionKeyName if missing
+            if (meta.Representation == PasswordRepresentation.Encrypted &&
+                string.IsNullOrEmpty(meta.EncryptionKeyName))
+            {
+                meta.EncryptionKeyName = meta.Key + ".enc";
+            }
             _initialData = meta;
             LoadedMetadata = meta;
-
-            // 1. Load metadata key (editable)
-            txtKey.Text = meta.Key ?? "";
 
             // 2. Load representation
             cboRepresentation.SelectedItem = meta.Representation;
 
-            // 3. Vault mode handling
-            if (meta.Location == PasswordLocation.Vault)
-            {
-                chkVault.Checked = true;
-                _isVaultMode = true;
+            // 3. Vault mode checkbox
+            chkVault.Checked = (meta.Location == PasswordLocation.Vault);
+            _isVaultMode = chkVault.Checked;
 
-                // meta.Password IS the vault key
-                _vaultKey = meta.Password;
+            // 4. Clear password fields (always blank on load)
+            txtCurrent.Text = "";
+            txtNew.Text = "";
+            txtConfirm.Text = "";
 
-                var pw = Vault.Read(_vaultKey);
-                txtCurrent.Text = pw ?? string.Empty;
-                _recoveredPassword = pw;
-            }
-            else
-            {
-                chkVault.Checked = false;
-                _isVaultMode = false;
-
-                // Inline password
-                txtCurrent.Text = meta.Password;
-            }
-
-            // 4. Populate context list (only matters for Database target)
+            // 5. Populate context list (only matters for Database target)
             PopulateContextList();
 
-            // 5. Restore context selection (using connection ID, NOT password key)
+            // 6. Restore context selection (using connection ID)
             if (_currentTarget == PasswordTarget.Database && _currentConnectionId != null)
-            {
                 cboContext.SelectedValue = _currentConnectionId;
-            }
+
+            // 7. Update buttons
+            bool hasPassword = !string.IsNullOrEmpty(meta.Password);
+            btnRemove.Enabled = hasPassword;
+            btnUpdate.Text = hasPassword ? "Update" : "Add";
+            txtCurrent.Enabled = hasPassword;
         }
         #endregion
         #region Private Helpers
-        private void ApplyRepresentationLogic(PasswordMetadata meta, PasswordTarget target, string plaintext)
+        private void ApplyRepresentationLogic(
+            PasswordMetadata meta,
+            PasswordMetadata existing,
+            string plaintext)
         {
-            switch (meta.Location)
+            // Cleanup old encrypted key if switching away from Encrypted
+            if (existing.Representation == PasswordRepresentation.Encrypted &&
+                meta.Representation != PasswordRepresentation.Encrypted &&
+                !string.IsNullOrEmpty(existing.EncryptionKeyName))
             {
-                case PasswordLocation.Vault:
-                    SaveVaultPassword(target, plaintext, meta);
+                Vault.Delete(existing.EncryptionKeyName);
+            }
+            switch (meta.Representation)
+            {
+                // ---------------------------------------------------------
+                // PLAINTEXT
+                // ---------------------------------------------------------
+                case PasswordRepresentation.Plaintext:
+                    meta.Password = plaintext;
                     break;
 
-                case PasswordLocation.Inline:
-                    switch (meta.Representation)
+                // ---------------------------------------------------------
+                // HASHED
+                // ---------------------------------------------------------
+                case PasswordRepresentation.Hashed:
+                    meta.Password = Crypto.HashPassword(plaintext);
+                    break;
+
+                // ---------------------------------------------------------
+                // ENCRYPTED (inline)
+                // ---------------------------------------------------------
+                case PasswordRepresentation.Encrypted:
                     {
-                        case PasswordRepresentation.Plaintext:
-                            SaveInlinePlaintext(plaintext, meta);
-                            break;
+                        // For non-DB targets, use the canonical vault key base
+                        if (string.IsNullOrEmpty(meta.EncryptionKeyName))
+                        {
+                            string baseKey = _currentTarget == PasswordTarget.Database
+                                ? GenerateDbVaultKey(_currentConnection)          // e.g. Medical.MariaDB
+                                : GenerateVaultKey(_currentTarget);               // e.g. Medical.app
 
-                        case PasswordRepresentation.Hashed:
-                            SaveInlineHashed(plaintext, meta);
-                            break;
+                            meta.EncryptionKeyName = baseKey + ".enc";            // e.g. Medical.app.enc
+                        }
 
-                        case PasswordRepresentation.Encrypted:
-                            SaveEncryptedInlinePassword(target, plaintext, meta);
-                            break;
+                        // Generate a new AES-256 key
+                        string encryptionKey =
+                            Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+
+                        // Store key in vault
+                        Vault.Write(meta.EncryptionKeyName, encryptionKey);
+
+                        // Encrypt password
+                        meta.Password = MySqlCrypto.Encrypt(plaintext, encryptionKey);
+                        break;
                     }
-                    break;
+
+                // ---------------------------------------------------------
+                // SECRET (vault mode)
+                // ---------------------------------------------------------
+                case PasswordRepresentation.Secret:
+                    {
+                        // Determine vault key
+                        string vaultKey;
+
+                        if (existing.Location == PasswordLocation.Vault &&
+                            existing.Representation == PasswordRepresentation.Secret)
+                        {
+                            // Reuse existing vault key
+                            vaultKey = existing.Password;
+                        }
+                        else
+                        {
+                            // Generate new vault key based on target
+                            vaultKey = _currentTarget == PasswordTarget.Database
+                                ? GenerateDbVaultKey(_currentConnection)
+                                : GenerateVaultKey(_currentTarget);
+                        }
+
+                        // Orphan cleanup: if vault key changed, delete old entry
+                        if (existing.Location == PasswordLocation.Vault &&
+                            existing.Password != vaultKey)
+                        {
+                            Vault.Delete(existing.Password);
+                        }
+
+                        // Write new password into vault
+                        Vault.Write(vaultKey, plaintext);
+
+                        // Store vault key in metadata
+                        meta.Password = vaultKey;
+                        break;
+                    }
             }
         }
         private PasswordMetadata BuildMetadataFromUI(PasswordMetadata existing)
         {
-            // Determine final password value
-            string newPassword =
-                !string.IsNullOrEmpty(txtNew.Text)
-                    ? txtNew.Text
-                    : txtCurrent.Text;
+            var meta = new PasswordMetadata();
 
-            // Editable metadata key
-            string newMetaKey = txtKey.Text;
-
-            var meta = new PasswordMetadata
+            // 1. Assign canonical key based on target
+            switch (_currentTarget)
             {
-                Key = newMetaKey
-            };
+                case PasswordTarget.Application:
+                    meta.Key = "App";
+                    break;
 
-            if (chkVault.Checked)
-            {
-                // Determine vault key
-                string vaultKey;
+                case PasswordTarget.Configuration:
+                    meta.Key = "Config";
+                    break;
 
-                if (existing.Location == PasswordLocation.Vault)
-                {
-                    // Reuse existing vault key
-                    vaultKey = existing.Password;
-                }
-                else
-                {
-                    // Generate vault key based on target
-                    vaultKey = _currentTarget == PasswordTarget.Database
-                        ? GenerateDbVaultKey(_currentConnection)
-                        : GenerateVaultKey(_currentTarget);
-                }
+                case PasswordTarget.Diagnostics:
+                    meta.Key = "Diag";
+                    break;
 
-                // --- ORPHAN CLEANUP (correct placement) ---
-                // If the old metadata was vault-based and the vault key changed,
-                // delete the old vault entry.
-                if (existing.Location == PasswordLocation.Vault &&
-                    existing.Password != vaultKey)
-                {
-                    Vault.Delete(existing.Password);
-                }
+                case PasswordTarget.Archiving:
+                    meta.Key = "Arch";
+                    break;
 
-                // Write password into vault if changed
-                if (Vault.Read(vaultKey) != newPassword)
-                    Vault.Write(vaultKey, newPassword);
+                case PasswordTarget.Historical:
+                    meta.Key = "Hist";
+                    break;
 
-                meta.Location = PasswordLocation.Vault;
-                meta.Representation = PasswordRepresentation.Secret;
-                meta.Password = vaultKey; // store vault key, not password
+                case PasswordTarget.Database:
+                    meta.Key = _currentConnectionId;
+                    break;
             }
-            else
-            {
-                // Inline mode
-                meta.Location = PasswordLocation.Inline;
-                meta.Representation = (PasswordRepresentation)cboRepresentation.SelectedItem!;
-                meta.Password = newPassword;
-            }
+
+            // 2. Assign representation (plaintext, hashed, encrypted, secret)
+            meta.Representation = chkVault.Checked
+                ? PasswordRepresentation.Secret
+                : (PasswordRepresentation)cboRepresentation.SelectedItem!;
+
+            // 3. Assign location (Vault or Inline)
+            meta.Location = chkVault.Checked
+                ? PasswordLocation.Vault
+                : PasswordLocation.Inline;
 
             return meta;
         }
@@ -236,6 +278,21 @@ namespace ToolsUI.UserControls
                         .FirstOrDefault(p => p.Key == "Config")
                         ?? new PasswordMetadata { Key = "Config" };
 
+                case PasswordTarget.Diagnostics:
+                    return CurrentSettings.Passwords
+                        .FirstOrDefault(p => p.Key == "Diag")
+                        ?? new PasswordMetadata { Key = "Diag" };
+
+                case PasswordTarget.Archiving:
+                    return CurrentSettings.Passwords
+                        .FirstOrDefault(p => p.Key == "Arch")
+                        ?? new PasswordMetadata { Key = "Arch" };
+
+                case PasswordTarget.Historical:
+                    return CurrentSettings.Passwords
+                        .FirstOrDefault(p => p.Key == "Hist")
+                        ?? new PasswordMetadata { Key = "Hist" };
+
                 case PasswordTarget.Database:
                     if (string.IsNullOrWhiteSpace(connectionId))
                         return new PasswordMetadata { Key = "Db" };
@@ -250,7 +307,8 @@ namespace ToolsUI.UserControls
                     return conn.Password ?? new PasswordMetadata { Key = $"Db:{connectionId}" };
 
                 default:
-                    return new PasswordMetadata();
+                    // Should never happen, but safe fallback
+                    return new PasswordMetadata { Key = "Unknown" };
             }
         }
         private void PopulateContextList()
@@ -279,6 +337,22 @@ namespace ToolsUI.UserControls
         }
         private void RemoveMetadata(PasswordTarget target, string? connectionId)
         {
+            PasswordMetadata existing = GetMetadata(target, connectionId);
+
+            // Cleanup vault entries
+            if (existing.Location == PasswordLocation.Vault)
+            {
+                Vault.Delete(existing.Password);
+            }
+
+            // Cleanup encrypted inline keys
+            if (existing.Representation == PasswordRepresentation.Encrypted &&
+                !string.IsNullOrEmpty(existing.EncryptionKeyName))
+            {
+                Vault.Delete(existing.EncryptionKeyName);
+            }
+
+            // Now remove metadata normally
             switch (target)
             {
                 case PasswordTarget.Application:
@@ -297,26 +371,9 @@ namespace ToolsUI.UserControls
                         conn.Password = null;
 
                     break;
+
+                    // Add Diag/Arch/Hist if needed
             }
-        }
-        private void SaveEncryptedInlinePassword(PasswordTarget target, string plaintextPassword, PasswordMetadata meta)
-        {
-            // 1. Derive vault key name
-            string encKeyName = GenerateVaultKey(target) + ".enc";
-
-            // 2. Generate new encryption key
-            string encryptionKey = Crypto.GenerateKeyString();
-
-            // 3. Store encryption key in vault
-            Vault.Write(encKeyName, encryptionKey);
-
-            // 4. Encrypt password
-            string encryptedBlob = MySqlCrypto.Encrypt(plaintextPassword, encryptionKey);
-
-            // 5. Update metadata
-            meta.Password = encryptedBlob;
-            meta.Location = PasswordLocation.Inline;
-            meta.Representation = PasswordRepresentation.Encrypted;
         }
         private void SaveMetadata(PasswordMetadata meta, PasswordTarget target, string? connectionId)
         {
@@ -332,6 +389,21 @@ namespace ToolsUI.UserControls
                     CurrentSettings.Passwords.Add(meta);
                     break;
 
+                case PasswordTarget.Diagnostics:
+                    CurrentSettings.Passwords.RemoveAll(p => p.Key == "Diag");
+                    CurrentSettings.Passwords.Add(meta);
+                    break;
+
+                case PasswordTarget.Archiving:
+                    CurrentSettings.Passwords.RemoveAll(p => p.Key == "Arch");
+                    CurrentSettings.Passwords.Add(meta);
+                    break;
+
+                case PasswordTarget.Historical:
+                    CurrentSettings.Passwords.RemoveAll(p => p.Key == "Hist");
+                    CurrentSettings.Passwords.Add(meta);
+                    break;
+
                 case PasswordTarget.Database:
                     var conn = CurrentSettings.Database.Connections
                         .FirstOrDefault(c => c.ConnectionId == connectionId);
@@ -341,34 +413,6 @@ namespace ToolsUI.UserControls
 
                     break;
             }
-        }
-        private void SaveInlineHashed(string plaintext, PasswordMetadata meta)
-        {
-            // Whatever hashing function you already use
-            string hash = Crypto.HashPassword(plaintext);
-
-            meta.Password = hash;
-            meta.Location = PasswordLocation.Inline;
-            meta.Representation = PasswordRepresentation.Hashed;
-        }
-        private void SaveInlinePlaintext(string plaintext, PasswordMetadata meta)
-        {
-            meta.Password = plaintext;
-            meta.Location = PasswordLocation.Inline;
-            meta.Representation = PasswordRepresentation.Plaintext;
-        }
-        private void SaveVaultPassword(PasswordTarget target, string plaintext, PasswordMetadata meta)
-        {
-            // 1. Determine vault key name
-            string vaultKeyName = GenerateVaultKey(target);
-
-            // 2. Write the real password to the vault
-            Vault.Write(vaultKeyName, plaintext);
-
-            // 3. Update metadata to reference vault mode
-            meta.Password = vaultKeyName;
-            meta.Location = PasswordLocation.Vault;
-            meta.Representation = PasswordRepresentation.Plaintext;
         }
         private void TogglePassword(TextBox txt, Button btn)
         {
@@ -380,17 +424,38 @@ namespace ToolsUI.UserControls
             // Update the button label
             btn.Text = isShowing ? "Show" : "Hide";
         }
-        private bool ValidateNewPassword()
+        private bool VerifyPassword(PasswordMetadata meta)
         {
-            if (txtNew.Text != txtConfirm.Text)
+            string entered = txtCurrent.Text; // user-entered plaintext
+
+            switch (meta.Location)
             {
-                MessageBox.Show("New and Confirm passwords do not match.");
-                return false;
+                case PasswordLocation.Inline:
+                    switch (meta.Representation)
+                    {
+                        case PasswordRepresentation.Plaintext:
+                            return meta.Password == entered;
+
+                        case PasswordRepresentation.Hashed:
+                            return Crypto.HashPassword(entered) == meta.Password;
+
+                        case PasswordRepresentation.Encrypted:
+                            // Encryption key name should be stored in metadata
+                            string? encryptionKey = Vault.Read(meta.EncryptionKeyName);
+                            if (encryptionKey == null)
+                                return false;
+
+                            string decrypted = MySqlCrypto.Decrypt(meta.Password, encryptionKey);
+                            return decrypted == entered;
+                    }
+                    break;
+
+                case PasswordLocation.Vault:
+                    string? stored = Vault.Read(meta.Password);
+                    return stored == entered;
             }
 
-            // Add more validation rules here
-
-            return true;
+            return false;
         }
         private void WireEvents()
         {
@@ -406,8 +471,10 @@ namespace ToolsUI.UserControls
             btnConfirm.Click += Button_Click;
 
             btnUpdate.Click += Button_Click;
-            btnCancel.Click += Button_Click;
             btnRemove.Click += Button_Click;
+
+            txtCurrent.Leave += TextBox_Leave;
+            txtConfirm.Leave += TextBox_Leave;
         }
 
         #endregion
@@ -428,34 +495,31 @@ namespace ToolsUI.UserControls
                         TogglePassword(txtNew, btn);
                         break;
                     case "Update":
-                        if (!ValidateNewPassword())
-                            return;
-
                         // Load existing metadata (App/Config or DB)
                         PasswordMetadata existing = GetMetadata(_currentTarget, _currentConnectionId);
 
                         // Build updated metadata using vault/inline rules
                         PasswordMetadata updated = BuildMetadataFromUI(existing);
 
-                        // NEW: Apply encryption / hashing / vault logic
+                        // Apply encryption / hashing / vault logic
                         string plaintext = txtNew.Text.Length > 0 ? txtNew.Text : txtCurrent.Text;
-                        ApplyRepresentationLogic(updated, _currentTarget, plaintext);
+                        ApplyRepresentationLogic(updated, existing, plaintext);
 
                         // Save to correct location in SettingsModel
                         SaveMetadata(updated, _currentTarget, _currentConnectionId);
+                        // Reload editor into a clean state BEFORE the tree refresh
+                        LoadMetadata(GetMetadata(_currentTarget, _currentConnectionId));
 
                         // Refresh UI
-                        LoadMetadata(GetMetadata(_currentTarget, _currentConnectionId));
-                        RequestClose();
-                        break;
-                    case "Cancel":
-                        LoadMetadata(GetMetadata(_currentTarget, _currentConnectionId)); // reload from settings
-                        RequestClose();
+                        RequestRefresh();
                         break;
                     case "Remove":
                         RemoveMetadata(_currentTarget, _currentConnectionId);
+
+                        // Reload editor into a clean state BEFORE the tree refresh
                         LoadMetadata(GetMetadata(_currentTarget, _currentConnectionId));
-                        RequestClose();
+
+                        RequestRefresh();
                         break;
                 }
             }
@@ -518,6 +582,32 @@ namespace ToolsUI.UserControls
         {
             // Vault mode may override representation options
             RefreshRepresentationOptions();
+        }
+        private void TextBox_Leave(object? sender, EventArgs e)
+        {
+            if (sender is TextBox txt && txt.Tag is string Tags)
+            {
+                switch (Tags)
+                {
+                    case "Current":
+                        if(!txt.Enabled)
+                            return;
+                        // Optional: verify current password on leave
+                        if (LoadedMetadata != null && !VerifyPassword(LoadedMetadata))
+                        {
+                            MessageBox.Show("Current password is incorrect.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            txtCurrent.Focus();
+                        }
+                        break;
+                    case "Confirm":
+                        if (txtNew.Text != txtConfirm.Text)
+                        {
+                            MessageBox.Show("New password and confirmation do not match.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            txtConfirm.Focus();
+                        }
+                        break;
+                }
+            }
         }
         #endregion
     }

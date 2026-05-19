@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPasswordEditor.Designer.cs
  * File: UcPasswordEditor.Designer.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: 2026-05-11
- * Modified: 2026-05-13
+ * Modified: 2026-05-19
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -70,14 +70,10 @@ namespace ToolsUI.UserControls
             txtCurrent = new TextBox();
             label6 = new Label();
             toolTip1 = new ToolTip(components);
-            btnCancel = new Button();
             btnUpdate = new Button();
             btnRemove = new Button();
-            txtKey = new TextBox();
             pnlButtons = new Panel();
             lblTitle = new Label();
-            panel1 = new Panel();
-            label7 = new Label();
             pnlRoot = new Panel();
             pnlTarget.SuspendLayout();
             pnlStyle.SuspendLayout();
@@ -85,7 +81,6 @@ namespace ToolsUI.UserControls
             pnlNew.SuspendLayout();
             pnlCurrent.SuspendLayout();
             pnlButtons.SuspendLayout();
-            panel1.SuspendLayout();
             pnlRoot.SuspendLayout();
             SuspendLayout();
             // 
@@ -109,6 +104,7 @@ namespace ToolsUI.UserControls
             cboContext.Name = "cboContext";
             cboContext.Size = new Size(132, 23);
             cboContext.TabIndex = 1;
+            cboContext.Tag = "Connection";
             toolTip1.SetToolTip(cboContext, "Enabled when Target is the Database Password\r\nSelects the available connections configured");
             // 
             // label2
@@ -185,16 +181,16 @@ namespace ToolsUI.UserControls
             pnlConfirm.Controls.Add(btnConfirm);
             pnlConfirm.Controls.Add(txtConfirm);
             pnlConfirm.Controls.Add(label4);
-            pnlConfirm.Location = new Point(44, 207);
+            pnlConfirm.Location = new Point(59, 174);
             pnlConfirm.Name = "pnlConfirm";
-            pnlConfirm.Size = new Size(351, 34);
+            pnlConfirm.Size = new Size(321, 34);
             pnlConfirm.TabIndex = 10;
             // 
             // btnConfirm
             // 
             btnConfirm.Location = new Point(257, 4);
             btnConfirm.Name = "btnConfirm";
-            btnConfirm.Size = new Size(75, 23);
+            btnConfirm.Size = new Size(48, 23);
             btnConfirm.TabIndex = 5;
             btnConfirm.Tag = "ShowConfirm";
             btnConfirm.Text = "Show";
@@ -224,16 +220,16 @@ namespace ToolsUI.UserControls
             pnlNew.Controls.Add(btnNew);
             pnlNew.Controls.Add(txtNew);
             pnlNew.Controls.Add(label5);
-            pnlNew.Location = new Point(44, 172);
+            pnlNew.Location = new Point(59, 139);
             pnlNew.Name = "pnlNew";
-            pnlNew.Size = new Size(351, 34);
+            pnlNew.Size = new Size(321, 34);
             pnlNew.TabIndex = 9;
             // 
             // btnNew
             // 
             btnNew.Location = new Point(257, 4);
             btnNew.Name = "btnNew";
-            btnNew.Size = new Size(75, 23);
+            btnNew.Size = new Size(48, 23);
             btnNew.TabIndex = 5;
             btnNew.Tag = "ShowNew";
             btnNew.Text = "Show";
@@ -263,9 +259,9 @@ namespace ToolsUI.UserControls
             pnlCurrent.Controls.Add(btnCurrent);
             pnlCurrent.Controls.Add(txtCurrent);
             pnlCurrent.Controls.Add(label6);
-            pnlCurrent.Location = new Point(44, 137);
+            pnlCurrent.Location = new Point(59, 104);
             pnlCurrent.Name = "pnlCurrent";
-            pnlCurrent.Size = new Size(351, 34);
+            pnlCurrent.Size = new Size(321, 34);
             pnlCurrent.TabIndex = 8;
             // 
             // btnCurrent
@@ -288,6 +284,7 @@ namespace ToolsUI.UserControls
             txtCurrent.PasswordChar = '*';
             txtCurrent.Size = new Size(176, 23);
             txtCurrent.TabIndex = 4;
+            txtCurrent.Tag = "Current";
             toolTip1.SetToolTip(txtCurrent, "The current password");
             // 
             // label6
@@ -298,17 +295,6 @@ namespace ToolsUI.UserControls
             label6.Size = new Size(50, 15);
             label6.TabIndex = 3;
             label6.Text = "Current";
-            // 
-            // btnCancel
-            // 
-            btnCancel.Location = new Point(84, 3);
-            btnCancel.Name = "btnCancel";
-            btnCancel.Size = new Size(75, 23);
-            btnCancel.TabIndex = 1;
-            btnCancel.Tag = "Cancel";
-            btnCancel.Text = "&Cancel";
-            toolTip1.SetToolTip(btnCancel, "Cancels the operation and closes the control");
-            btnCancel.UseVisualStyleBackColor = true;
             // 
             // btnUpdate
             // 
@@ -323,7 +309,7 @@ namespace ToolsUI.UserControls
             // 
             // btnRemove
             // 
-            btnRemove.Location = new Point(167, 4);
+            btnRemove.Location = new Point(84, 4);
             btnRemove.Name = "btnRemove";
             btnRemove.Size = new Size(75, 23);
             btnRemove.TabIndex = 2;
@@ -332,22 +318,13 @@ namespace ToolsUI.UserControls
             toolTip1.SetToolTip(btnRemove, "Removes the designated password");
             btnRemove.UseVisualStyleBackColor = true;
             // 
-            // txtKey
-            // 
-            txtKey.Location = new Point(42, 4);
-            txtKey.Name = "txtKey";
-            txtKey.Size = new Size(176, 23);
-            txtKey.TabIndex = 4;
-            toolTip1.SetToolTip(txtKey, "The Password Key");
-            // 
             // pnlButtons
             // 
             pnlButtons.Controls.Add(btnRemove);
-            pnlButtons.Controls.Add(btnCancel);
             pnlButtons.Controls.Add(btnUpdate);
-            pnlButtons.Location = new Point(95, 242);
+            pnlButtons.Location = new Point(133, 209);
             pnlButtons.Name = "pnlButtons";
-            pnlButtons.Size = new Size(248, 31);
+            pnlButtons.Size = new Size(172, 31);
             pnlButtons.TabIndex = 11;
             // 
             // lblTitle
@@ -359,31 +336,12 @@ namespace ToolsUI.UserControls
             lblTitle.TabIndex = 12;
             lblTitle.Text = "Password Editor";
             // 
-            // panel1
-            // 
-            panel1.Controls.Add(txtKey);
-            panel1.Controls.Add(label7);
-            panel1.Location = new Point(106, 102);
-            panel1.Name = "panel1";
-            panel1.Size = new Size(227, 34);
-            panel1.TabIndex = 13;
-            // 
-            // label7
-            // 
-            label7.AutoSize = true;
-            label7.Location = new Point(8, 8);
-            label7.Name = "label7";
-            label7.Size = new Size(28, 15);
-            label7.TabIndex = 3;
-            label7.Text = "Key";
-            // 
             // pnlRoot
             // 
             pnlRoot.AutoSize = true;
             pnlRoot.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             pnlRoot.Controls.Add(lblTitle);
             pnlRoot.Controls.Add(pnlCurrent);
-            pnlRoot.Controls.Add(panel1);
             pnlRoot.Controls.Add(pnlButtons);
             pnlRoot.Controls.Add(pnlTarget);
             pnlRoot.Controls.Add(pnlConfirm);
@@ -391,7 +349,7 @@ namespace ToolsUI.UserControls
             pnlRoot.Controls.Add(pnlStyle);
             pnlRoot.Location = new Point(3, 3);
             pnlRoot.Name = "pnlRoot";
-            pnlRoot.Size = new Size(437, 276);
+            pnlRoot.Size = new Size(437, 243);
             pnlRoot.TabIndex = 14;
             // 
             // UcPasswordEditor
@@ -403,7 +361,7 @@ namespace ToolsUI.UserControls
             Controls.Add(pnlRoot);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             Name = "UcPasswordEditor";
-            Size = new Size(452, 287);
+            Size = new Size(452, 246);
             pnlTarget.ResumeLayout(false);
             pnlTarget.PerformLayout();
             pnlStyle.ResumeLayout(false);
@@ -415,8 +373,6 @@ namespace ToolsUI.UserControls
             pnlCurrent.ResumeLayout(false);
             pnlCurrent.PerformLayout();
             pnlButtons.ResumeLayout(false);
-            panel1.ResumeLayout(false);
-            panel1.PerformLayout();
             pnlRoot.ResumeLayout(false);
             pnlRoot.PerformLayout();
             ResumeLayout(false);
@@ -448,13 +404,9 @@ namespace ToolsUI.UserControls
         private Label label6;
         private ToolTip toolTip1;
         private Panel pnlButtons;
-        private Button btnCancel;
         private Button btnUpdate;
         private Button btnRemove;
         private Label lblTitle;
-        private Panel panel1;
-        private TextBox txtKey;
-        private Label label7;
         private Panel pnlRoot;
     }
 }

@@ -10,24 +10,19 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/DatabaseEngine.cs
  * File: DatabaseEngine.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: 2026-03-31
- * Modified: 2026-05-14
+ * Modified: 2026-05-19
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
  */
 using LiteDB;
 using System;
-using System;
-using System.Collections.Generic;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq;
-using System.Text;
 using System.Text;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 using System.Threading.Tasks;
 
 namespace Tools.Config
