@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmConfig.cs
  * File: FrmConfig.cs
- * Version: 1.0.3
+ * Version: 1.0.4
  * Created: 2026-03-31
- * Modified: 2026-05-14
+ * Modified: 2026-05-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -50,10 +50,10 @@ namespace ToolsUI.Config
         private UIHelperService Helpers = new();
         private TabLayoutManager _layout;
         private bool _loadingPath = false;
+        private bool _isDirty = false;
         private SettingsModel CurrentSettings;
         private SettingsModel _settings;
         private readonly string _configPath;
-        private SettingsModel currentSettings {  get; set; }
         #endregion
         #region public Structs/Enums
         #endregion
@@ -63,7 +63,6 @@ namespace ToolsUI.Config
             InitializeComponent();
             AppName = appname;
             InitializeControls();
-            //InitializeTreeControls();
             _configPath = ConfigManager.GetConfigPath(AppName);
         }
         #endregion
@@ -80,10 +79,11 @@ namespace ToolsUI.Config
         {
             editor.RefreshRequested += (s, e) =>
             {
-                // Rebuild the tree
+                _isDirty = true;
+                btnSave.Enabled = true;
+
                 ReloadTree();
 
-                // Re-run the AfterSelect logic on the same node
                 if (tvConfig.SelectedNode != null)
                 {
                     TvConfig_AfterSelect(tvConfig, new TreeViewEventArgs(tvConfig.SelectedNode));
@@ -283,9 +283,19 @@ namespace ToolsUI.Config
                 switch (tag)
                 {
                     case "Save":
-                        //ConfigManager.Save(AppName, _settings);
-                        MessageBox.Show("Configuration saved successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        this.Close();
+                        ConfigManager.Save(AppName, _settings);
+
+                        _isDirty = false;          // reset dirty flag
+                        btnSave.Enabled = false;   // disable Save button
+
+                        MessageBox.Show(
+                            "Configuration saved successfully.",
+                            "Success",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information
+                        );
+
+                        // DO NOT close the form
                         break;
                     case "Cancel":
                         this.Close();

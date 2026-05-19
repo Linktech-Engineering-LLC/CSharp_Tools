@@ -1,11 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: BaseTools
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Files/DBLite.cs
  * File: DBLite.cs
- * Version: 1.0.0
+ * Version: 1.0.1
  * Created: 2026-03-31
- * Modified: 2026-05-11
+ * Modified: 2026-05-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -44,10 +51,7 @@ namespace Tools.Files
             _db = new LiteDatabase(path, _mapper);
         }
         public void CreateTableIfMissing<T>(string name)
-            where T : class, new()
-        {
-            _db.GetCollection<T>(name);
-        }
+            where T : class, new() => _db.GetCollection<T>(name);
         public T? Load<T>(string name)
             where T : class, new()
         {
@@ -62,8 +66,8 @@ namespace Tools.Files
             int version = doc["Version"].AsInt32;
 
             // Enforce final schema
-            if (version != 7)
-                throw new InvalidOperationException($"Unsupported config version: {version}");
+            // Version enforcement happens in DBLiteSchema.Ensure()
+            // Do NOT block loading here.
 
             // Optional: keep DB clean
             if (PurgeNullFields(doc))

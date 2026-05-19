@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPathEditor.Designer.cs
  * File: UcPathEditor.Designer.cs
- * Version: 1.0.3
+ * Version: 1.0.4
  * Created: 2026-05-11
- * Modified: 2026-05-14
+ * Modified: 2026-05-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -50,7 +50,6 @@ namespace ToolsUI.UserControls
             components = new System.ComponentModel.Container();
             pnlButtons = new Panel();
             btnRemove = new Button();
-            btnCancel = new Button();
             btnUpdate = new Button();
             panel2 = new Panel();
             btnBrowse = new Button();
@@ -75,16 +74,15 @@ namespace ToolsUI.UserControls
             // pnlButtons
             // 
             pnlButtons.Controls.Add(btnRemove);
-            pnlButtons.Controls.Add(btnCancel);
             pnlButtons.Controls.Add(btnUpdate);
-            pnlButtons.Location = new Point(38, 148);
+            pnlButtons.Location = new Point(78, 148);
             pnlButtons.Name = "pnlButtons";
-            pnlButtons.Size = new Size(248, 31);
+            pnlButtons.Size = new Size(168, 31);
             pnlButtons.TabIndex = 12;
             // 
             // btnRemove
             // 
-            btnRemove.Location = new Point(167, 4);
+            btnRemove.Location = new Point(83, 4);
             btnRemove.Name = "btnRemove";
             btnRemove.Size = new Size(75, 23);
             btnRemove.TabIndex = 2;
@@ -92,17 +90,6 @@ namespace ToolsUI.UserControls
             btnRemove.Text = "&Remove";
             toolTip1.SetToolTip(btnRemove, "Remove the selected Path");
             btnRemove.UseVisualStyleBackColor = true;
-            // 
-            // btnCancel
-            // 
-            btnCancel.Location = new Point(84, 3);
-            btnCancel.Name = "btnCancel";
-            btnCancel.Size = new Size(75, 23);
-            btnCancel.TabIndex = 1;
-            btnCancel.Tag = "Cancel";
-            btnCancel.Text = "&Cancel";
-            toolTip1.SetToolTip(btnCancel, "Cancel the Operation and Close the UC");
-            btnCancel.UseVisualStyleBackColor = true;
             // 
             // btnUpdate
             // 
@@ -215,7 +202,7 @@ namespace ToolsUI.UserControls
             // lblTitle
             // 
             lblTitle.AutoSize = true;
-            lblTitle.Location = new Point(128, 6);
+            lblTitle.Location = new Point(130, 6);
             lblTitle.Name = "lblTitle";
             lblTitle.Size = new Size(65, 15);
             lblTitle.TabIndex = 0;
@@ -270,7 +257,6 @@ namespace ToolsUI.UserControls
         private TextBox txtPath;
         private Panel pnlButtons;
         private Button btnRemove;
-        private Button btnCancel;
         private Button btnUpdate;
         private ToolTip toolTip1;
         private Panel pnlRoot;

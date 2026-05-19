@@ -10,9 +10,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/AppPaths.cs
  * File: AppPaths.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: 2026-05-01
- * Modified: 2026-05-13
+ * Modified: 2026-05-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -38,10 +38,12 @@ namespace Tools.Config
     }
     public enum PathLocation
     {
-        LogPath,
         DataPath,
         TempPath,
         DbPath,
+        ArchivePath,
+        LogPath,
+        RotatePath,
         Custom
     }
     public class AppPath

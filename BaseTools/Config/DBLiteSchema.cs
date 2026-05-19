@@ -1,11 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: BaseTools
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/DBLiteSchema.cs
  * File: DBLiteSchema.cs
- * Version: 1.0.0
+ * Version: 1.0.1
  * Created: 2026-03-31
- * Modified: 2026-04-30
+ * Modified: 2026-05-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -18,7 +25,7 @@ namespace Tools.Config
 {
     public static class DBLiteSchema
     {
-        private const int _SchemaVersion = 1;
+        private const int _SchemaVersion = 7;
         public static int SchemaVersion => _SchemaVersion;
         public static readonly HashSet<string> IgnoredFields = new()
         {
@@ -55,6 +62,13 @@ namespace Tools.Config
                 info.Version = SchemaVersion;
                 db.Save("SchemaInfo", info);
             }
+            else if (info.Version > SchemaVersion)
+            {
+                throw new InvalidOperationException(
+                    $"Database schema version {info.Version} is newer than this application supports ({SchemaVersion})."
+                );
+            }
+
         }
 
         /// <summary>

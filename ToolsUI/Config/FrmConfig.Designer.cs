@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmConfig.Designer.cs
  * File: FrmConfig.Designer.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: None
- * Modified: 2026-05-14
+ * Modified: 2026-05-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -113,6 +113,7 @@ namespace ToolsUI.Config
             // 
             // btnSave
             // 
+            btnSave.Enabled = false;
             btnSave.Location = new Point(3, 5);
             btnSave.Name = "btnSave";
             btnSave.Size = new Size(75, 23);

@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPathEditor.cs
  * File: UcPathEditor.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: 2026-05-11
- * Modified: 2026-05-14
+ * Modified: 2026-05-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -39,6 +39,7 @@ namespace ToolsUI.UserControls
         #region Private Fields
         private SettingsModel _settings;
         private PathLocation _loc;
+        private bool _loading = false;
         #endregion
         #region Constructors/Destructors
         public UcPathEditor()
@@ -61,8 +62,8 @@ namespace ToolsUI.UserControls
             ReloadMetadata();
             btnBrowse.Click += Button_Click;
             btnUpdate.Click += Button_Click;
-            btnCancel.Click += Button_Click;
             btnRemove.Click += Button_Click;
+            cboPathName.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
         }
         #endregion
         #region Private Helpers
@@ -73,13 +74,22 @@ namespace ToolsUI.UserControls
         }
         private void ReloadMetadata()
         {
-            var ap = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
-            if (ap == null)
-                return;
-
+            _loading = true;
             cboPathName.SelectedItem = _loc;
-            cboPathType.SelectedItem = ap.PathType;
-            txtPath.Text = ap.PathValue;
+            AppPath? ap = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
+            txtPath.Text = ap is null ? string.Empty : ap.PathValue;
+            btnRemove.Enabled = ap != null;
+            btnUpdate.Text = ap != null ? "&Edit" : "&Add";
+            if (ap == null)
+            {
+                cboPathType.SelectedIndex = -1;
+                cboPathType.Text = string.Empty;
+            }
+            else
+            {
+                cboPathType.SelectedItem = ap.PathType;
+            }
+            _loading = false;
         }
         #endregion
         #region Private From Events
@@ -116,15 +126,37 @@ namespace ToolsUI.UserControls
                         }
                         RequestRefresh();
                         break;
-                    case "Cancel":
-                        RequestClose();
-                        break;
                     case "Remove":
                         AppPath? apRemove = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
                         if (apRemove != null)
                         {
                             _settings.Paths.Remove(apRemove);
+
+                            // Pick a new logical path
+                            if (_settings.Paths.Count > 0)
+                                _loc = _settings.Paths[0].PathName;
+                            else
+                                _loc = default; // or your default
+                            ReloadMetadata();
                             RequestRefresh();
+                        }
+                        break;
+                }
+            }
+        }
+        private void ComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (_loading) return;
+
+            if (sender is ComboBox cbo && cbo.Tag is string Tags)
+            {
+                switch (Tags)
+                {
+                    case "PathName":
+                        if (cbo.SelectedItem is PathLocation pl)
+                        {
+                            _loc = pl;
+                            ReloadMetadata();
                         }
                         break;
                 }

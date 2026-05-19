@@ -1,11 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: BaseTools
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/ConfigManager.cs
  * File: ConfigManager.cs
- * Version: 1.0.0
+ * Version: 1.0.1
  * Created: 2026-03-31
- * Modified: 2026-05-03
+ * Modified: 2026-05-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -76,7 +83,9 @@ namespace Tools.Config
 
             // Merge UI fields into existing document
             foreach (KeyValuePair<string, BsonValue> kv in updated)
+            {
                 existing[kv.Key] = kv.Value;
+            }
 
             // Save merged document
             db.Save("Settings", existing);
