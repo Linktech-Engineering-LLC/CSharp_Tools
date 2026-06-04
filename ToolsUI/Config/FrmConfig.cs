@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmConfig.cs
  * File: FrmConfig.cs
- * Version: 1.0.4
+ * Version: 1.0.5
  * Created: 2026-03-31
- * Modified: 2026-05-18
+ * Modified: 2026-06-04
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -261,19 +261,6 @@ namespace ToolsUI.Config
         public string AppName { get; set; }
         #endregion
         #region Public Methods
-        public class DiagnosticListItem
-        {
-            public string Text { get; }
-            public bool Success { get; }
-
-            public DiagnosticListItem(string text, bool success)
-            {
-                Text = text;
-                Success = success;
-            }
-
-            public override string ToString() => Text;
-        }
         #endregion
         #region Private Form Methods
         private void Button_Click(object sender, EventArgs e)
@@ -305,8 +292,8 @@ namespace ToolsUI.Config
         }
         private void FormLoad(object sender, EventArgs e)
         {
-            // Load settings
             _settings = ConfigManager.Load(AppName);
+
             BuildConfigTree();
             tvConfig.AfterSelect += TvConfig_AfterSelect;
         }

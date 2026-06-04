@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPasswordEditor.cs
  * File: UcPasswordEditor.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: 2026-05-11
- * Modified: 2026-05-19
+ * Modified: 2026-06-04
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -90,13 +90,6 @@ namespace ToolsUI.UserControls
             _initialData = meta;
             LoadedMetadata = meta;
 
-            // 2. Load representation
-            cboRepresentation.SelectedItem = meta.Representation;
-
-            // 3. Vault mode checkbox
-            chkVault.Checked = (meta.Location == PasswordLocation.Vault);
-            _isVaultMode = chkVault.Checked;
-
             // 4. Clear password fields (always blank on load)
             txtCurrent.Text = "";
             txtNew.Text = "";
@@ -122,148 +115,44 @@ namespace ToolsUI.UserControls
             PasswordMetadata existing,
             string plaintext)
         {
-            // Cleanup old encrypted key if switching away from Encrypted
-            if (existing.Representation == PasswordRepresentation.Encrypted &&
-                meta.Representation != PasswordRepresentation.Encrypted &&
-                !string.IsNullOrEmpty(existing.EncryptionKeyName))
+            if (_currentTarget == PasswordTarget.Database)
             {
-                Vault.Delete(existing.EncryptionKeyName);
+                string vaultKey = $"{Application.ProductName}.{_currentConnection.Engine}.{_currentConnection.ConnectionId}";
+                Vault.Write(vaultKey, plaintext);
+                meta.Password = vaultKey;
+                return;
             }
-            switch (meta.Representation)
-            {
-                // ---------------------------------------------------------
-                // PLAINTEXT
-                // ---------------------------------------------------------
-                case PasswordRepresentation.Plaintext:
-                    meta.Password = plaintext;
-                    break;
 
-                // ---------------------------------------------------------
-                // HASHED
-                // ---------------------------------------------------------
-                case PasswordRepresentation.Hashed:
-                    meta.Password = Crypto.HashPassword(plaintext);
-                    break;
+            // Non-database: always encrypted inline
+            string baseKey = $"{Application.ProductName}.{meta.Key}";
+            meta.EncryptionKeyName = baseKey + ".enc";
 
-                // ---------------------------------------------------------
-                // ENCRYPTED (inline)
-                // ---------------------------------------------------------
-                case PasswordRepresentation.Encrypted:
-                    {
-                        // For non-DB targets, use the canonical vault key base
-                        if (string.IsNullOrEmpty(meta.EncryptionKeyName))
-                        {
-                            string baseKey = _currentTarget == PasswordTarget.Database
-                                ? GenerateDbVaultKey(_currentConnection)          // e.g. Medical.MariaDB
-                                : GenerateVaultKey(_currentTarget);               // e.g. Medical.app
+            string encryptionKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            Vault.Write(meta.EncryptionKeyName, encryptionKey);
 
-                            meta.EncryptionKeyName = baseKey + ".enc";            // e.g. Medical.app.enc
-                        }
-
-                        // Generate a new AES-256 key
-                        string encryptionKey =
-                            Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-
-                        // Store key in vault
-                        Vault.Write(meta.EncryptionKeyName, encryptionKey);
-
-                        // Encrypt password
-                        meta.Password = MySqlCrypto.Encrypt(plaintext, encryptionKey);
-                        break;
-                    }
-
-                // ---------------------------------------------------------
-                // SECRET (vault mode)
-                // ---------------------------------------------------------
-                case PasswordRepresentation.Secret:
-                    {
-                        // Determine vault key
-                        string vaultKey;
-
-                        if (existing.Location == PasswordLocation.Vault &&
-                            existing.Representation == PasswordRepresentation.Secret)
-                        {
-                            // Reuse existing vault key
-                            vaultKey = existing.Password;
-                        }
-                        else
-                        {
-                            // Generate new vault key based on target
-                            vaultKey = _currentTarget == PasswordTarget.Database
-                                ? GenerateDbVaultKey(_currentConnection)
-                                : GenerateVaultKey(_currentTarget);
-                        }
-
-                        // Orphan cleanup: if vault key changed, delete old entry
-                        if (existing.Location == PasswordLocation.Vault &&
-                            existing.Password != vaultKey)
-                        {
-                            Vault.Delete(existing.Password);
-                        }
-
-                        // Write new password into vault
-                        Vault.Write(vaultKey, plaintext);
-
-                        // Store vault key in metadata
-                        meta.Password = vaultKey;
-                        break;
-                    }
-            }
+            meta.Password = MySqlCrypto.Encrypt(plaintext, encryptionKey);
         }
         private PasswordMetadata BuildMetadataFromUI(PasswordMetadata existing)
         {
             var meta = new PasswordMetadata();
 
-            // 1. Assign canonical key based on target
             switch (_currentTarget)
             {
-                case PasswordTarget.Application:
-                    meta.Key = "App";
-                    break;
-
-                case PasswordTarget.Configuration:
-                    meta.Key = "Config";
-                    break;
-
-                case PasswordTarget.Diagnostics:
-                    meta.Key = "Diag";
-                    break;
-
-                case PasswordTarget.Archiving:
-                    meta.Key = "Arch";
-                    break;
-
-                case PasswordTarget.Historical:
-                    meta.Key = "Hist";
-                    break;
-
                 case PasswordTarget.Database:
                     meta.Key = _currentConnectionId;
+                    meta.Location = PasswordLocation.Vault;
+                    meta.Representation = PasswordRepresentation.Secret;
+                    break;
+
+                default:
+                    meta.Key = existing.Key; // App, Config, etc.
+                    meta.Location = PasswordLocation.Inline;
+                    meta.Representation = PasswordRepresentation.Encrypted;
                     break;
             }
 
-            // 2. Assign representation (plaintext, hashed, encrypted, secret)
-            meta.Representation = chkVault.Checked
-                ? PasswordRepresentation.Secret
-                : (PasswordRepresentation)cboRepresentation.SelectedItem!;
-
-            // 3. Assign location (Vault or Inline)
-            meta.Location = chkVault.Checked
-                ? PasswordLocation.Vault
-                : PasswordLocation.Inline;
-
             return meta;
         }
-        private string GenerateDbVaultKey(DbConnection conn) => $"{Application.ProductName}.{conn.Engine}";
-        private string GenerateVaultKey(PasswordTarget target) => target switch
-        {
-            PasswordTarget.Application => $"{Application.ProductName}.app",
-            PasswordTarget.Configuration => $"{Application.ProductName}.config",
-            PasswordTarget.Diagnostics => $"{Application.ProductName}.diag",
-            PasswordTarget.Archiving => $"{Application.ProductName}.arch",
-            PasswordTarget.Historical => $"{Application.ProductName}.hist",
-            _ => $"{Application.ProductName}.password"
-        };
         private PasswordMetadata GetMetadata(PasswordTarget target, string? connectionId)
         {
             switch (target)
@@ -314,11 +203,12 @@ namespace ToolsUI.UserControls
         private void PopulateContextList()
         {
             // Always visible, but only enabled for Database target
-            cboContext.Enabled = (SelectedTarget == PasswordTarget.Database);
+            pnlDatabase.Enabled = (SelectedTarget == PasswordTarget.Database);
 
-            if (!cboContext.Enabled)
+            if (!pnlDatabase.Enabled)
             {
                 cboContext.DataSource = null;
+                txtID.Text = string.Empty;
                 return;
             }
 
@@ -330,6 +220,7 @@ namespace ToolsUI.UserControls
             cboContext.DataSource = connections;
             cboContext.DisplayMember = "Display";
             cboContext.ValueMember = "ConnectionId";
+            txtID.Text = _currentConnectionId ?? "";
         }
         private void RefreshRepresentationOptions()
         {
@@ -459,13 +350,10 @@ namespace ToolsUI.UserControls
         }
         private void WireEvents()
         {
-            cboRepresentation.DataSource = Enum.GetValues(typeof(PasswordRepresentation));
             cboTarget.DataSource = Enum.GetValues(typeof(PasswordTarget));
             cboTarget.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
             cboContext.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
 
-            chkVault.CheckedChanged += ChkVault_CheckedChanged;
-            cboRepresentation.SelectedIndexChanged += ComboBox_SelectedIndexChanged;
             btnCurrent.Click += Button_Click;
             btnNew.Click += Button_Click;
             btnConfirm.Click += Button_Click;

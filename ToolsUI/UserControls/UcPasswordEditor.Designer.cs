@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPasswordEditor.Designer.cs
  * File: UcPasswordEditor.Designer.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: 2026-05-11
- * Modified: 2026-05-19
+ * Modified: 2026-06-04
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -49,14 +49,10 @@ namespace ToolsUI.UserControls
         {
             components = new System.ComponentModel.Container();
             pnlTarget = new Panel();
-            cboContext = new ComboBox();
-            label2 = new Label();
             cboTarget = new ComboBox();
             label1 = new Label();
-            pnlStyle = new Panel();
-            cboRepresentation = new ComboBox();
-            chkVault = new CheckBox();
-            label3 = new Label();
+            cboContext = new ComboBox();
+            label2 = new Label();
             pnlConfirm = new Panel();
             btnConfirm = new Button();
             txtConfirm = new TextBox();
@@ -72,49 +68,29 @@ namespace ToolsUI.UserControls
             toolTip1 = new ToolTip(components);
             btnUpdate = new Button();
             btnRemove = new Button();
+            txtID = new TextBox();
             pnlButtons = new Panel();
             lblTitle = new Label();
             pnlRoot = new Panel();
+            pnlDatabase = new Panel();
+            label7 = new Label();
             pnlTarget.SuspendLayout();
-            pnlStyle.SuspendLayout();
             pnlConfirm.SuspendLayout();
             pnlNew.SuspendLayout();
             pnlCurrent.SuspendLayout();
             pnlButtons.SuspendLayout();
             pnlRoot.SuspendLayout();
+            pnlDatabase.SuspendLayout();
             SuspendLayout();
             // 
             // pnlTarget
             // 
-            pnlTarget.Controls.Add(cboContext);
-            pnlTarget.Controls.Add(label2);
             pnlTarget.Controls.Add(cboTarget);
             pnlTarget.Controls.Add(label1);
-            pnlTarget.Location = new Point(5, 28);
+            pnlTarget.Location = new Point(87, 28);
             pnlTarget.Name = "pnlTarget";
-            pnlTarget.Size = new Size(429, 39);
+            pnlTarget.Size = new Size(195, 39);
             pnlTarget.TabIndex = 0;
-            // 
-            // cboContext
-            // 
-            cboContext.DropDownStyle = ComboBoxStyle.DropDownList;
-            cboContext.Enabled = false;
-            cboContext.FormattingEnabled = true;
-            cboContext.Location = new Point(274, 6);
-            cboContext.Name = "cboContext";
-            cboContext.Size = new Size(132, 23);
-            cboContext.TabIndex = 1;
-            cboContext.Tag = "Connection";
-            toolTip1.SetToolTip(cboContext, "Enabled when Target is the Database Password\r\nSelects the available connections configured");
-            // 
-            // label2
-            // 
-            label2.AutoSize = true;
-            label2.Location = new Point(199, 10);
-            label2.Name = "label2";
-            label2.Size = new Size(70, 15);
-            label2.TabIndex = 0;
-            label2.Text = "Connection";
             // 
             // cboTarget
             // 
@@ -135,53 +111,32 @@ namespace ToolsUI.UserControls
             label1.TabIndex = 0;
             label1.Text = "Target";
             // 
-            // pnlStyle
+            // cboContext
             // 
-            pnlStyle.Controls.Add(cboRepresentation);
-            pnlStyle.Controls.Add(chkVault);
-            pnlStyle.Controls.Add(label3);
-            pnlStyle.Location = new Point(65, 68);
-            pnlStyle.Name = "pnlStyle";
-            pnlStyle.Size = new Size(309, 34);
-            pnlStyle.TabIndex = 6;
+            cboContext.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboContext.FormattingEnabled = true;
+            cboContext.Location = new Point(82, 3);
+            cboContext.Name = "cboContext";
+            cboContext.Size = new Size(132, 23);
+            cboContext.TabIndex = 1;
+            cboContext.Tag = "Connection";
+            toolTip1.SetToolTip(cboContext, "Enabled when Target is the Database Password\r\nSelects the available connections configured");
             // 
-            // cboRepresentation
+            // label2
             // 
-            cboRepresentation.DropDownStyle = ComboBoxStyle.DropDownList;
-            cboRepresentation.FormattingEnabled = true;
-            cboRepresentation.Location = new Point(166, 3);
-            cboRepresentation.Name = "cboRepresentation";
-            cboRepresentation.Size = new Size(134, 23);
-            cboRepresentation.TabIndex = 2;
-            cboRepresentation.Tag = "Representation";
-            toolTip1.SetToolTip(cboRepresentation, "The style of the target password");
-            // 
-            // chkVault
-            // 
-            chkVault.AutoSize = true;
-            chkVault.Location = new Point(5, 5);
-            chkVault.Name = "chkVault";
-            chkVault.Size = new Size(54, 19);
-            chkVault.TabIndex = 0;
-            chkVault.Text = "Vault";
-            toolTip1.SetToolTip(chkVault, "Checked if the Password is stored in the Windows Vault");
-            chkVault.UseVisualStyleBackColor = true;
-            // 
-            // label3
-            // 
-            label3.AutoSize = true;
-            label3.Location = new Point(66, 7);
-            label3.Name = "label3";
-            label3.Size = new Size(93, 15);
-            label3.TabIndex = 1;
-            label3.Text = "Representation";
+            label2.AutoSize = true;
+            label2.Location = new Point(7, 7);
+            label2.Name = "label2";
+            label2.Size = new Size(70, 15);
+            label2.TabIndex = 0;
+            label2.Text = "Connection";
             // 
             // pnlConfirm
             // 
             pnlConfirm.Controls.Add(btnConfirm);
             pnlConfirm.Controls.Add(txtConfirm);
             pnlConfirm.Controls.Add(label4);
-            pnlConfirm.Location = new Point(59, 174);
+            pnlConfirm.Location = new Point(24, 175);
             pnlConfirm.Name = "pnlConfirm";
             pnlConfirm.Size = new Size(321, 34);
             pnlConfirm.TabIndex = 10;
@@ -220,7 +175,7 @@ namespace ToolsUI.UserControls
             pnlNew.Controls.Add(btnNew);
             pnlNew.Controls.Add(txtNew);
             pnlNew.Controls.Add(label5);
-            pnlNew.Location = new Point(59, 139);
+            pnlNew.Location = new Point(24, 140);
             pnlNew.Name = "pnlNew";
             pnlNew.Size = new Size(321, 34);
             pnlNew.TabIndex = 9;
@@ -259,7 +214,7 @@ namespace ToolsUI.UserControls
             pnlCurrent.Controls.Add(btnCurrent);
             pnlCurrent.Controls.Add(txtCurrent);
             pnlCurrent.Controls.Add(label6);
-            pnlCurrent.Location = new Point(59, 104);
+            pnlCurrent.Location = new Point(24, 105);
             pnlCurrent.Name = "pnlCurrent";
             pnlCurrent.Size = new Size(321, 34);
             pnlCurrent.TabIndex = 8;
@@ -318,11 +273,19 @@ namespace ToolsUI.UserControls
             toolTip1.SetToolTip(btnRemove, "Removes the designated password");
             btnRemove.UseVisualStyleBackColor = true;
             // 
+            // txtID
+            // 
+            txtID.Location = new Point(252, 3);
+            txtID.Name = "txtID";
+            txtID.Size = new Size(100, 23);
+            txtID.TabIndex = 3;
+            toolTip1.SetToolTip(txtID, "The ID String for the Database Connection");
+            // 
             // pnlButtons
             // 
             pnlButtons.Controls.Add(btnRemove);
             pnlButtons.Controls.Add(btnUpdate);
-            pnlButtons.Location = new Point(133, 209);
+            pnlButtons.Location = new Point(98, 210);
             pnlButtons.Name = "pnlButtons";
             pnlButtons.Size = new Size(172, 31);
             pnlButtons.TabIndex = 11;
@@ -330,7 +293,7 @@ namespace ToolsUI.UserControls
             // lblTitle
             // 
             lblTitle.AutoSize = true;
-            lblTitle.Location = new Point(172, 6);
+            lblTitle.Location = new Point(137, 6);
             lblTitle.Name = "lblTitle";
             lblTitle.Size = new Size(95, 15);
             lblTitle.TabIndex = 12;
@@ -340,17 +303,38 @@ namespace ToolsUI.UserControls
             // 
             pnlRoot.AutoSize = true;
             pnlRoot.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            pnlRoot.Controls.Add(pnlDatabase);
             pnlRoot.Controls.Add(lblTitle);
             pnlRoot.Controls.Add(pnlCurrent);
             pnlRoot.Controls.Add(pnlButtons);
             pnlRoot.Controls.Add(pnlTarget);
             pnlRoot.Controls.Add(pnlConfirm);
             pnlRoot.Controls.Add(pnlNew);
-            pnlRoot.Controls.Add(pnlStyle);
             pnlRoot.Location = new Point(3, 3);
             pnlRoot.Name = "pnlRoot";
-            pnlRoot.Size = new Size(437, 243);
+            pnlRoot.Size = new Size(367, 244);
             pnlRoot.TabIndex = 14;
+            // 
+            // pnlDatabase
+            // 
+            pnlDatabase.Controls.Add(txtID);
+            pnlDatabase.Controls.Add(label7);
+            pnlDatabase.Controls.Add(cboContext);
+            pnlDatabase.Controls.Add(label2);
+            pnlDatabase.Enabled = false;
+            pnlDatabase.Location = new Point(5, 71);
+            pnlDatabase.Name = "pnlDatabase";
+            pnlDatabase.Size = new Size(359, 32);
+            pnlDatabase.TabIndex = 13;
+            // 
+            // label7
+            // 
+            label7.AutoSize = true;
+            label7.Location = new Point(226, 7);
+            label7.Name = "label7";
+            label7.Size = new Size(20, 15);
+            label7.TabIndex = 2;
+            label7.Text = "ID";
             // 
             // UcPasswordEditor
             // 
@@ -361,11 +345,9 @@ namespace ToolsUI.UserControls
             Controls.Add(pnlRoot);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             Name = "UcPasswordEditor";
-            Size = new Size(452, 246);
+            Size = new Size(372, 246);
             pnlTarget.ResumeLayout(false);
             pnlTarget.PerformLayout();
-            pnlStyle.ResumeLayout(false);
-            pnlStyle.PerformLayout();
             pnlConfirm.ResumeLayout(false);
             pnlConfirm.PerformLayout();
             pnlNew.ResumeLayout(false);
@@ -375,6 +357,8 @@ namespace ToolsUI.UserControls
             pnlButtons.ResumeLayout(false);
             pnlRoot.ResumeLayout(false);
             pnlRoot.PerformLayout();
+            pnlDatabase.ResumeLayout(false);
+            pnlDatabase.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -386,10 +370,6 @@ namespace ToolsUI.UserControls
         private ComboBox cboTarget;
         private ComboBox cboContext;
         private Label label2;
-        private Panel pnlStyle;
-        private ComboBox cboRepresentation;
-        private CheckBox chkVault;
-        private Label label3;
         private Panel pnlConfirm;
         private Button btnConfirm;
         private TextBox txtConfirm;
@@ -408,5 +388,8 @@ namespace ToolsUI.UserControls
         private Button btnRemove;
         private Label lblTitle;
         private Panel pnlRoot;
+        private Panel pnlDatabase;
+        private TextBox txtID;
+        private Label label7;
     }
 }
