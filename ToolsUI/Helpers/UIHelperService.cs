@@ -1,10 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: ToolsUI
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Helpers/UIHelperService.cs
  * File: UIHelperService.cs
+ * Version: 1.0.1
  * Created: 2026-03-31
- * Modified: 2026-04-01
+ * Modified: 2026-06-05
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -24,7 +32,7 @@ using ToolsUI.Logging;
 #endregion
 namespace ToolsUI.Helpers
 {
-    public class UIHelperService
+    public sealed class UIHelperService
     {
         #region Private Properties
         #endregion
@@ -34,6 +42,17 @@ namespace ToolsUI.Helpers
         }
         #endregion
         #region Public Properties
+        public static UIHelperService Instance { get; } = new UIHelperService();
+        public void TogglePassword(TextBox txt, Button btn)
+        {
+            bool isShowing = txt.PasswordChar == '\0';
+
+            // Toggle the mask
+            txt.PasswordChar = isShowing ? '•' : '\0';
+
+            // Update the button label
+            btn.Text = isShowing ? "Show" : "Hide";
+        }
         #endregion
         #region Public Methods
         public void ClearBoxIfDisabled(TextBox box)

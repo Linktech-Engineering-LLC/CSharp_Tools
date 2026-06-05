@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPathEditor.cs
  * File: UcPathEditor.cs
- * Version: 1.0.3
+ * Version: 1.0.4
  * Created: 2026-05-11
- * Modified: 2026-05-18
+ * Modified: 2026-06-05
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -27,10 +27,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Tools.Config;
-using Tools.Enums;
 #endregion
 #region Project Libraries
+using Tools.Config;
+using Tools.Enums;
 #endregion
 namespace ToolsUI.UserControls
 {
@@ -45,6 +45,14 @@ namespace ToolsUI.UserControls
         public UcPathEditor()
         {
             InitializeComponent();
+        }
+        #endregion
+        #region Private Helpers
+        private bool IsLoggerPath(PathLocation loc)
+        {
+            return loc == PathLocation.LogPath
+                || loc == PathLocation.RotatePath
+                || loc == PathLocation.ArchivePath;
         }
         #endregion
         #region Public Properties/Methods
@@ -67,6 +75,42 @@ namespace ToolsUI.UserControls
         }
         #endregion
         #region Private Helpers
+        private AppPath EnsureLoggerPath(PathLocation loc)
+        {
+            AppPath ap = loc switch
+            {
+                PathLocation.LogPath => _settings.Logger.LogDirectory,
+                PathLocation.RotatePath => _settings.Logger.RotatePath,
+                PathLocation.ArchivePath => _settings.Logger.ArchivePath,
+                _ => null
+            };
+
+            if (ap == null)
+            {
+                ap = new AppPath
+                {
+                    PathName = loc,
+                    PathType = PathType.LocalDrive,
+                    PathValue = string.Empty
+                };
+
+                // Assign it back into LoggerConfig
+                switch (loc)
+                {
+                    case PathLocation.LogPath:
+                        _settings.Logger.LogDirectory = ap;
+                        break;
+                    case PathLocation.RotatePath:
+                        _settings.Logger.RotatePath = ap;
+                        break;
+                    case PathLocation.ArchivePath:
+                        _settings.Logger.ArchivePath = ap;
+                        break;
+                }
+            }
+
+            return ap;
+        }
         private void PopulateCombos()
         {
             cboPathName.DataSource = Enum.GetValues(typeof(PathLocation));
@@ -76,21 +120,54 @@ namespace ToolsUI.UserControls
         {
             _loading = true;
             cboPathName.SelectedItem = _loc;
-            AppPath? ap = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
-            txtPath.Text = ap is null ? string.Empty : ap.PathValue;
-            btnRemove.Enabled = ap != null;
-            btnUpdate.Text = ap != null ? "&Edit" : "&Add";
-            if (ap == null)
+
+            bool isLoggerPath = IsLoggerPath(_loc);
+
+            if (isLoggerPath)
             {
+                // Ensure the AppPath object exists
+                AppPath ap = EnsureLoggerPath(_loc);
+
+                // Load the value
+                txtPath.Text = ap.PathValue ?? string.Empty;
+
+                // Logger paths always use LocalDrive
+                cboPathType.Enabled = false;
+                cboPathType.SelectedItem = PathType.LocalDrive;
+
+                // Button states
+                bool hasValue = !string.IsNullOrWhiteSpace(ap.PathValue);
+                btnRemove.Enabled = hasValue;
+                btnUpdate.Text = hasValue ? "&Edit" : "&Add";
+
+                _loading = false;
+                return;
+            }
+
+            //
+            // Normal (non-logger) path handling
+            //
+            AppPath? normal = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
+
+            txtPath.Text = normal?.PathValue ?? string.Empty;
+            btnRemove.Enabled = normal != null;
+            btnUpdate.Text = normal != null ? "&Edit" : "&Add";
+
+            if (normal == null)
+            {
+                cboPathType.Enabled = true;
                 cboPathType.SelectedIndex = -1;
                 cboPathType.Text = string.Empty;
             }
             else
             {
-                cboPathType.SelectedItem = ap.PathType;
+                cboPathType.Enabled = true;
+                cboPathType.SelectedItem = normal.PathType;
             }
+
             _loading = false;
         }
+
         #endregion
         #region Private From Events
         private void Button_Click(object? sender, EventArgs e)
@@ -109,11 +186,43 @@ namespace ToolsUI.UserControls
                         }
                         break;
                     case "Update":
-                        var ap = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
-                        if (ap != null)
+
+                        if (IsLoggerPath(_loc))
                         {
-                            ap.PathType = (PathType)cboPathType.SelectedItem;
-                            ap.PathValue = txtPath.Text;
+                            string value = txtPath.Text;
+                            
+                            switch (_loc)
+                            {
+                                case PathLocation.LogPath:
+                                    _settings.Logger.LogDirectory.PathValue = value ?? string.Empty;
+                                    break;
+
+                                case PathLocation.RotatePath:
+                                    _settings.Logger.RotatePath.PathValue = value ?? string.Empty;
+                                    break;
+
+                                case PathLocation.ArchivePath:
+                                    _settings.Logger.ArchivePath.PathValue = value ?? string.Empty;
+                                    break;
+                            }
+
+                            // Remove from general paths list
+                            var ap = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
+                            if (ap != null)
+                                _settings.Paths.Remove(ap);
+
+                            RequestRefresh();
+                            break;
+                        }
+
+                        // Normal path update...
+
+                        // Normal path update
+                        var path = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
+                        if (path != null)
+                        {
+                            path.PathType = (PathType)cboPathType.SelectedItem;
+                            path.PathValue = txtPath.Text;
                         }
                         else
                         {
@@ -124,22 +233,44 @@ namespace ToolsUI.UserControls
                                 PathValue = txtPath.Text
                             });
                         }
+
                         RequestRefresh();
                         break;
                     case "Remove":
-                        AppPath? apRemove = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
-                        if (apRemove != null)
-                        {
-                            _settings.Paths.Remove(apRemove);
 
-                            // Pick a new logical path
-                            if (_settings.Paths.Count > 0)
-                                _loc = _settings.Paths[0].PathName;
-                            else
-                                _loc = default; // or your default
-                            ReloadMetadata();
+                        if (IsLoggerPath(_loc))
+                        {
+                            // Clear logger config
+                            switch (_loc)
+                            {
+                                case PathLocation.LogPath:
+                                    _settings.Logger.LogDirectory.PathValue = string.Empty;
+                                    break;
+
+                                case PathLocation.RotatePath:
+                                    _settings.Logger.RotatePath.PathValue = string.Empty;
+                                    break;
+
+                                case PathLocation.ArchivePath:
+                                    _settings.Logger.ArchivePath.PathValue = string.Empty;
+                                    break;
+                            }
+
+                            // Remove from general paths list
+                            var apRemove = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
+                            if (apRemove != null)
+                                _settings.Paths.Remove(apRemove);
+
                             RequestRefresh();
+                            break;
                         }
+
+                        // Normal path removal
+                        var ap2 = _settings.Paths.FirstOrDefault(p => p.PathName == _loc);
+                        if (ap2 != null)
+                            _settings.Paths.Remove(ap2);
+
+                        RequestRefresh();
                         break;
                 }
             }

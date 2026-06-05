@@ -10,9 +10,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/AppPaths.cs
  * File: AppPaths.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: 2026-05-01
- * Modified: 2026-05-18
+ * Modified: 2026-06-05
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -41,6 +41,7 @@ namespace Tools.Config
         DataPath,
         TempPath,
         DbPath,
+        ScriptPath,
         ArchivePath,
         LogPath,
         RotatePath,

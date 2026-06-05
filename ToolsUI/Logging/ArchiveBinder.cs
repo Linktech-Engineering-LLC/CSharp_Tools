@@ -1,10 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: ToolsUI
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Logging/ArchiveBinder.cs
  * File: ArchiveBinder.cs
+ * Version: 1.0.1
  * Created: None
- * Modified: 2026-04-01
+ * Modified: 2026-06-05
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -15,10 +23,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Tools.Logging;
-using ToolsUI.Helpers;
 #endregion
 #region Project Libraries
+using Tools.Logging;
+using ToolsUI.Helpers;
 #endregion
 namespace ToolsUI.Logging
 {

@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcPasswordEditor.cs
  * File: UcPasswordEditor.cs
- * Version: 1.0.3
+ * Version: 1.0.4
  * Created: 2026-05-11
- * Modified: 2026-06-04
+ * Modified: 2026-06-05
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -35,6 +35,7 @@ using Tools.Config;
 using Tools.Converters;
 using Tools.Enums;
 using ToolsUI.Config;
+using ToolsUI.Helpers;
 #endregion
 
 namespace ToolsUI.UserControls
@@ -305,16 +306,6 @@ namespace ToolsUI.UserControls
                     break;
             }
         }
-        private void TogglePassword(TextBox txt, Button btn)
-        {
-            bool isShowing = txt.PasswordChar == '\0';
-
-            // Toggle the mask
-            txt.PasswordChar = isShowing ? '•' : '\0';
-
-            // Update the button label
-            btn.Text = isShowing ? "Show" : "Hide";
-        }
         private bool VerifyPassword(PasswordMetadata meta)
         {
             string entered = txtCurrent.Text; // user-entered plaintext
@@ -374,13 +365,13 @@ namespace ToolsUI.UserControls
                 switch (Tags)
                 {
                     case "ShowConfirm":
-                        TogglePassword(txtConfirm, btn);
+                        UIHelperService.Instance.TogglePassword(txtConfirm, btn);
                         break;
                     case "ShowCurrent":
-                        TogglePassword(txtCurrent, btn);
+                        UIHelperService.Instance.TogglePassword(txtCurrent, btn);
                         break;
                     case "ShowNew":
-                        TogglePassword(txtNew, btn);
+                        UIHelperService.Instance.TogglePassword(txtNew, btn);
                         break;
                     case "Update":
                         // Load existing metadata (App/Config or DB)

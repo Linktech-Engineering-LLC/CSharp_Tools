@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmPassword.cs
  * File: FrmPassword.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: 2026-04-04
- * Modified: 2026-06-04
+ * Modified: 2026-06-05
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -34,6 +34,7 @@ using Tools.Converters;
 #endregion
 #region Project Libraries
 using Tools.Enums;
+using ToolsUI.Helpers;
 #endregion
 
 namespace ToolsUI.Config
@@ -94,7 +95,7 @@ namespace ToolsUI.Config
                         txtPassword.Focus();
                         break;
                     case "Show":
-                        TogglePassword(txtPassword, btnShow);
+                        UIHelperService.Instance.TogglePassword(txtPassword, btnShow);
                         break;
                 }
             }
@@ -107,16 +108,6 @@ namespace ToolsUI.Config
             btnOk.Click += Button_Click;
             btnCancel.Click += Button_Click;
             btnShow.Click += Button_Click;
-        }
-        private void TogglePassword(TextBox txt, Button btn)
-        {
-            bool isShowing = txt.PasswordChar == '\0';
-
-            // Toggle the mask
-            txt.PasswordChar = isShowing ? '•' : '\0';
-
-            // Update the button label
-            btn.Text = isShowing ? "Show" : "Hide";
         }
         private bool VerifyPassword(PasswordMetadata meta, string entered)
         {

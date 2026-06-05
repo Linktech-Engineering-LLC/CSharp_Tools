@@ -1,10 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: BaseTools
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Logging/LoggerConfig.cs
  * File: LoggerConfig.cs
+ * Version: 1.0.1
  * Created: 2025-12-29
- * Modified: 2026-01-31
+ * Modified: 2026-06-05
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -28,6 +36,7 @@ namespace Tools.Logging
         public List<LoggerOption> Options { get; set; } = new();
         public int RetentionDays { get; set; }
         public RotationType RotationType { get; set; }
+        public string RotatePath { get; set; }
 
         #endregion
         #region Constructors/Destructors

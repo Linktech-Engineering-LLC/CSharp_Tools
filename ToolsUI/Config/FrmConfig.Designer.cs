@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmConfig.Designer.cs
  * File: FrmConfig.Designer.cs
- * Version: 1.0.3
+ * Version: 1.0.4
  * Created: None
- * Modified: 2026-05-18
+ * Modified: 2026-06-05
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -51,6 +51,7 @@ namespace ToolsUI.Config
             TreeNode treeNode1 = new TreeNode("Security");
             TreeNode treeNode2 = new TreeNode("Paths");
             TreeNode treeNode3 = new TreeNode("Database");
+            TreeNode treeNode4 = new TreeNode("Logger");
             pnlConfigure = new Panel();
             pnlContent = new Panel();
             tvConfig = new TreeView();
@@ -87,7 +88,7 @@ namespace ToolsUI.Config
             tvConfig.Dock = DockStyle.Left;
             tvConfig.Location = new Point(0, 0);
             tvConfig.Name = "tvConfig";
-            treeNode1.Name = "Node0";
+            treeNode1.Name = "NodeSecurity";
             treeNode1.Tag = "ucSecurity";
             treeNode1.Text = "Security";
             treeNode2.Name = "NodePaths";
@@ -96,7 +97,9 @@ namespace ToolsUI.Config
             treeNode3.Name = "NodeDatabase";
             treeNode3.Tag = "ucDatabase";
             treeNode3.Text = "Database";
-            tvConfig.Nodes.AddRange(new TreeNode[] { treeNode1, treeNode2, treeNode3 });
+            treeNode4.Name = "NodeLogger";
+            treeNode4.Text = "Logger";
+            tvConfig.Nodes.AddRange(new TreeNode[] { treeNode1, treeNode2, treeNode3, treeNode4 });
             tvConfig.Size = new Size(192, 261);
             tvConfig.TabIndex = 3;
             // 

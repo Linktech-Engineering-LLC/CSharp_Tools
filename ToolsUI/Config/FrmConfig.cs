@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Config/FrmConfig.cs
  * File: FrmConfig.cs
- * Version: 1.0.5
+ * Version: 1.0.6
  * Created: 2026-03-31
- * Modified: 2026-06-04
+ * Modified: 2026-06-05
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -35,7 +35,6 @@ using Tools.Config;
 using Tools.Diagnostics;
 using Tools.Enums;
 using Tools.Files;
-using ToolsUI.Helpers;
 using ToolsUI.Layout;
 using ToolsUI.UserControls;
 #endregion
@@ -44,18 +43,13 @@ namespace ToolsUI.Config
 {
     public partial class FrmConfig : Form
     {
-        #region Private Classes
-        #endregion
         #region Private Variables
-        private UIHelperService Helpers = new();
         private TabLayoutManager _layout;
         private bool _loadingPath = false;
         private bool _isDirty = false;
         private SettingsModel CurrentSettings;
         private SettingsModel _settings;
         private readonly string _configPath;
-        #endregion
-        #region public Structs/Enums
         #endregion
         #region Constructors/Destructors
         public FrmConfig(string appname)
@@ -227,6 +221,21 @@ namespace ToolsUI.Config
             editor.Initialize(conn);
             LoadControl(editor);
         }
+        private void LoadLoggingEditor()
+        {
+            var editor = new UcLoggerEditor
+            {
+                CurrentSettings = _settings
+            };
+
+            AttachCloseHandler(editor);
+            AttachRefreshHandler(editor);
+
+            editor.Initialize(_settings.Logger);
+
+            LoadControl(editor);
+        }
+
         private void LoadPasswordEditor(PasswordTarget target, string? connectionId)
         {
             UcPasswordEditor editor = new UcPasswordEditor
@@ -324,8 +333,12 @@ namespace ToolsUI.Config
                 case DbConnection conn:
                     LoadDatabaseEditor(conn);
                     break;
+                case "Logging":
+                    LoadLoggingEditor();
+                    break;
             }
         }
         #endregion
+
     }
 }
