@@ -1,0 +1,43 @@
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+DROP PROCEDURE IF EXISTS `ProcedureTypesSearch`;
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureTypesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT
+        Id,
+        CPTCode AS Code,
+        Name AS Description,
+        Active
+    FROM procedure_types
+    WHERE
+        v_Search IS NULL
+        OR CPTCode LIKE v_Search
+        OR Name LIKE v_Search
+        OR Description LIKE v_Search
+    ORDER BY Active DESC, CPTCode, Name, Id;
+END//
+DELIMITER ;
+
+/*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
+/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
+/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;

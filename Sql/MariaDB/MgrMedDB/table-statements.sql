@@ -1,0 +1,35 @@
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+DROP TABLE IF EXISTS `statements`;
+CREATE TABLE IF NOT EXISTS `statements` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `StatementDate` datetime NOT NULL,
+  `PeriodStart` date NOT NULL,
+  `PeriodEnd` date NOT NULL,
+  `BeginningBalance` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `NewCharges` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `Payments` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `Adjustments` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `EndingBalance` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Statements_PatientId` (`PatientId`),
+  KEY `FK_Statements_Visit` (`VisitId`),
+  CONSTRAINT `FK_Statements_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Statements_Visit` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+/*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
+/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
+/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;

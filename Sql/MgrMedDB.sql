@@ -1,0 +1,22996 @@
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+CREATE DATABASE IF NOT EXISTS `MgrMedDB` /*!40100 DEFAULT CHARACTER SET utf8mb3 */;
+USE `MgrMedDB`;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AddressesCreate`(
+    IN p_Maildrop VARCHAR(50),
+    IN p_Street   VARCHAR(50),
+    IN p_Suite    VARCHAR(50),
+    IN p_ZipCode  INT(5) UNSIGNED ZEROFILL,
+    IN p_City     VARCHAR(50),
+    IN p_State    CHAR(2),
+    IN p_Country  VARCHAR(10)
+)
+BEGIN
+    DECLARE v_exists INT;
+
+    
+    SELECT COUNT(*) INTO v_exists
+    FROM zip_codes
+    WHERE ZipCode = p_ZipCode;
+
+    IF v_exists = 0 THEN
+        SELECT 0 AS Success, 'Invalid ZipCode' AS Message, NULL AS Id;
+    ELSE
+        INSERT INTO addresses (
+            Maildrop, Street, Suite, ZipCode, City, State, Country
+        ) VALUES (
+            p_Maildrop, p_Street, p_Suite, p_ZipCode, p_City, p_State, p_Country
+        );
+
+        SELECT 1 AS Success, 'Address created' AS Message, LAST_INSERT_ID() AS Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AddressesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_refs INT;
+
+    
+    SELECT 
+        (SELECT COUNT(*) FROM patients WHERE AddressId = p_Id) +
+        (SELECT COUNT(*) FROM doctors WHERE AddressId = p_Id) +
+        (SELECT COUNT(*) FROM facilities WHERE AddressId = p_Id) +
+        (SELECT COUNT(*) FROM pharmacies WHERE AddressId = p_Id) +
+        (SELECT COUNT(*) FROM insurance_companies WHERE AddressId = p_Id)
+    INTO v_refs;
+
+    IF v_refs > 0 THEN
+        SELECT 0 AS Success, 'Address is referenced and cannot be deleted' AS Message;
+    ELSE
+        DELETE FROM addresses WHERE Id = p_Id;
+        SELECT 1 AS Success, 'Address deleted' AS Message;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AddressesGetById`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT 
+        a.Id,
+        a.Maildrop,
+        a.Street,
+        a.Suite,
+        a.ZipCode,
+        z.City AS ZipCity,
+        z.State AS ZipState,
+        a.City,
+        a.State,
+        a.Country,
+        a.AddressHash,
+        a.Created,
+        a.Updated
+    FROM addresses a
+    LEFT JOIN zip_codes z ON z.ZipCode = a.ZipCode
+    WHERE a.Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AddressesResolveId`(
+    IN  p_maildrop   VARCHAR(64),
+    IN  p_street     VARCHAR(128),
+    IN  p_suite      VARCHAR(64),
+    IN  p_city       VARCHAR(64),
+    IN  p_state      VARCHAR(32),
+    IN  p_zipcode    VARCHAR(16),
+    IN  p_country    VARCHAR(64),
+    OUT p_id         INT
+)
+BEGIN
+    DECLARE v_maildrop VARCHAR(64);
+    DECLARE v_street   VARCHAR(128);
+    DECLARE v_suite    VARCHAR(64);
+    DECLARE v_city     VARCHAR(64);
+    DECLARE v_state    VARCHAR(32);
+    DECLARE v_zipcode  VARCHAR(16);
+    DECLARE v_country  VARCHAR(64);
+    DECLARE v_hash     CHAR(64);
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    
+    SET p_id = 0;
+
+    
+    IF p_city IS NULL OR p_city = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_state IS NULL OR p_state = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_zipcode IS NULL OR p_zipcode = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_country IS NULL OR p_country = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF (p_maildrop IS NULL OR p_maildrop = '')
+       AND (p_street IS NULL OR p_street = '') THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF v_is_valid THEN
+
+        
+        SET v_maildrop = NormalizeAddressLine(p_maildrop);
+        SET v_street   = NormalizeAddressLine(p_street);
+        SET v_suite    = NormalizeAddressLine(p_suite);
+        SET v_city     = NormalizeCity(p_city);
+        SET v_state    = NormalizeState(p_state);
+        SET v_zipcode  = NormalizeZip(p_zipcode);
+        SET v_country  = NormalizeCountry(p_country);
+
+        
+        SET v_hash = ComputeAddressHash(
+            v_maildrop,
+            v_street,
+            v_suite,
+            v_city,
+            v_state,
+            v_zipcode,
+            v_country
+        );
+
+        
+        SELECT ID INTO p_id
+        FROM addresses
+        WHERE AddressHash = v_hash
+        LIMIT 1;
+
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AddressesUpdate`(
+    IN p_Id       BIGINT UNSIGNED,
+    IN p_Maildrop VARCHAR(50),
+    IN p_Street   VARCHAR(50),
+    IN p_Suite    VARCHAR(50),
+    IN p_ZipCode  INT(5) UNSIGNED ZEROFILL,
+    IN p_City     VARCHAR(50),
+    IN p_State    CHAR(2),
+    IN p_Country  VARCHAR(10)
+)
+BEGIN
+    DECLARE v_exists INT;
+
+    
+    SELECT COUNT(*) INTO v_exists
+    FROM addresses
+    WHERE Id = p_Id;
+
+    IF v_exists = 0 THEN
+        SELECT 0 AS Success, 'Address not found' AS Message;
+    ELSE
+
+        
+        IF p_ZipCode IS NOT NULL THEN
+            SELECT COUNT(*) INTO v_exists
+            FROM zip_codes
+            WHERE ZipCode = p_ZipCode;
+
+            IF v_exists = 0 THEN
+                SELECT 0 AS Success, 'Invalid ZipCode' AS Message;
+            ELSE
+                UPDATE addresses
+                SET
+                    Maildrop = COALESCE(p_Maildrop, Maildrop),
+                    Street   = COALESCE(p_Street, Street),
+                    Suite    = COALESCE(p_Suite, Suite),
+                    ZipCode  = COALESCE(p_ZipCode, ZipCode),
+                    City     = COALESCE(p_City, City),
+                    State    = COALESCE(p_State, State),
+                    Country  = COALESCE(p_Country, Country)
+                WHERE Id = p_Id;
+
+                SELECT 1 AS Success, 'Address updated' AS Message;
+            END IF;
+
+        ELSE
+            
+            UPDATE addresses
+            SET
+                Maildrop = COALESCE(p_Maildrop, Maildrop),
+                Street   = COALESCE(p_Street, Street),
+                Suite    = COALESCE(p_Suite, Suite),
+                ZipCode  = COALESCE(p_ZipCode, ZipCode),
+                City     = COALESCE(p_City, City),
+                State    = COALESCE(p_State, State),
+                Country  = COALESCE(p_Country, Country)
+            WHERE Id = p_Id;
+
+            SELECT 1 AS Success, 'Address updated' AS Message;
+        END IF;
+
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `adjustments` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `ChargeId` bigint(20) unsigned DEFAULT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `AdjustmentDate` datetime NOT NULL,
+  `Type` enum('Contractual','WriteOff','Correction','Refund','Goodwill','Other') NOT NULL,
+  `Amount` decimal(10,2) NOT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Adjustments_PatientId` (`PatientId`),
+  KEY `IX_Adjustments_ChargeId` (`ChargeId`),
+  KEY `IX_Adjustments_VisitId` (`VisitId`),
+  CONSTRAINT `FK_Adjustments_Charges` FOREIGN KEY (`ChargeId`) REFERENCES `charges` (`Id`),
+  CONSTRAINT `FK_Adjustments_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Adjustments_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AdjustmentsCreate`(
+    IN p_PatientId      BIGINT UNSIGNED,
+    IN p_ChargeId       BIGINT UNSIGNED,
+    IN p_VisitId        BIGINT UNSIGNED,
+    IN p_AdjustmentDate DATETIME,
+    IN p_Type           ENUM('Contractual','WriteOff','Correction','Refund','Goodwill','Other'),
+    IN p_Amount         DECIMAL(10,2),
+    IN p_Notes          TEXT
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_charge_patient BIGINT UNSIGNED;
+    DECLARE v_charge_visit   BIGINT UNSIGNED;
+
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+    DECLARE v_new_id BIGINT UNSIGNED DEFAULT NULL;
+
+    
+    IF p_PatientId IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'PatientId is required';
+    END IF;
+
+    IF v_success = 1 AND p_AdjustmentDate IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'AdjustmentDate is required';
+    END IF;
+
+    IF v_success = 1 AND p_Type IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'Type is required';
+    END IF;
+
+    IF v_success = 1 AND p_Amount IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'Amount is required';
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM patients
+        WHERE Id = p_PatientId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid PatientId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 AND p_ChargeId IS NOT NULL THEN
+
+        
+        SELECT COUNT(*) INTO v_exists
+        FROM charges
+        WHERE Id = p_ChargeId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid ChargeId';
+        END IF;
+
+        
+        IF v_success = 1 THEN
+            SELECT PatientId, VisitId
+            INTO v_charge_patient, v_charge_visit
+            FROM charges
+            WHERE Id = p_ChargeId;
+
+            IF v_charge_patient <> p_PatientId THEN
+                SET v_success = 0;
+                SET v_message = 'Charge does not belong to the specified PatientId';
+            END IF;
+        END IF;
+
+        
+        IF v_success = 1 AND p_VisitId IS NOT NULL AND v_charge_visit IS NOT NULL THEN
+            IF p_VisitId <> v_charge_visit THEN
+                SET v_success = 0;
+                SET v_message = 'VisitId does not match Charge.VisitId';
+            END IF;
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 AND p_VisitId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM visits
+        WHERE Id = p_VisitId
+          AND PatientId = p_PatientId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid VisitId for this PatientId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        INSERT INTO adjustments (
+            PatientId, ChargeId, VisitId, AdjustmentDate, Type, Amount, Notes
+        ) VALUES (
+            p_PatientId, p_ChargeId, p_VisitId, p_AdjustmentDate, p_Type, p_Amount, p_Notes
+        );
+
+        SET v_new_id = LAST_INSERT_ID();
+        SET v_message = 'Adjustment created';
+    END IF;
+
+    
+    SELECT v_success AS Success,
+           v_message AS Message,
+           v_new_id AS Id;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AdjustmentsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+
+    
+    SELECT COUNT(*) INTO v_exists
+    FROM adjustments
+    WHERE Id = p_Id;
+
+    IF v_exists = 0 THEN
+        SET v_success = 0;
+        SET v_message = 'Adjustment not found';
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        DELETE FROM adjustments
+        WHERE Id = p_Id;
+
+        SET v_message = 'Adjustment deleted';
+    END IF;
+
+    
+    SELECT v_success AS Success,
+           v_message AS Message;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AdjustmentsGetById`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT 
+        Id,
+        PatientId,
+        ChargeId,
+        VisitId,
+        AdjustmentDate,
+        Type,
+        Amount,
+        Notes,
+        Created,
+        Updated
+    FROM adjustments
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AdjustmentsUpdate`(
+    IN p_Id            BIGINT UNSIGNED,
+    IN p_PatientId     BIGINT UNSIGNED,
+    IN p_ChargeId      BIGINT UNSIGNED,
+    IN p_VisitId       BIGINT UNSIGNED,
+    IN p_AdjustmentDate DATETIME,
+    IN p_Type          ENUM('Contractual','WriteOff','Correction','Refund','Goodwill','Other'),
+    IN p_Amount        DECIMAL(10,2),
+    IN p_Notes         TEXT
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_charge_patient BIGINT UNSIGNED;
+    DECLARE v_charge_visit   BIGINT UNSIGNED;
+
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+
+    
+    SELECT COUNT(*) INTO v_exists
+    FROM adjustments
+    WHERE Id = p_Id;
+
+    IF v_exists = 0 THEN
+        SET v_success = 0;
+        SET v_message = 'Adjustment not found';
+    END IF;
+
+    
+    IF v_success = 1 AND p_PatientId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM patients
+        WHERE Id = p_PatientId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid PatientId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 AND p_ChargeId IS NOT NULL THEN
+
+        
+        SELECT COUNT(*) INTO v_exists
+        FROM charges
+        WHERE Id = p_ChargeId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid ChargeId';
+        END IF;
+
+        
+        IF v_success = 1 THEN
+            SELECT PatientId, VisitId
+            INTO v_charge_patient, v_charge_visit
+            FROM charges
+            WHERE Id = p_ChargeId;
+
+            IF p_PatientId IS NOT NULL AND v_charge_patient <> p_PatientId THEN
+                SET v_success = 0;
+                SET v_message = 'Charge does not belong to the specified PatientId';
+            END IF;
+        END IF;
+
+        
+        IF v_success = 1 AND p_VisitId IS NOT NULL AND v_charge_visit IS NOT NULL THEN
+            IF p_VisitId <> v_charge_visit THEN
+                SET v_success = 0;
+                SET v_message = 'VisitId does not match Charge.VisitId';
+            END IF;
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 AND p_VisitId IS NOT NULL AND p_PatientId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM visits
+        WHERE Id = p_VisitId
+          AND PatientId = p_PatientId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid VisitId for this PatientId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        UPDATE adjustments
+        SET
+            PatientId      = COALESCE(p_PatientId, PatientId),
+            ChargeId       = COALESCE(p_ChargeId, ChargeId),
+            VisitId        = COALESCE(p_VisitId, VisitId),
+            AdjustmentDate = COALESCE(p_AdjustmentDate, AdjustmentDate),
+            Type           = COALESCE(p_Type, Type),
+            Amount         = COALESCE(p_Amount, Amount),
+            Notes          = COALESCE(p_Notes, Notes)
+        WHERE Id = p_Id;
+
+        SET v_message = 'Adjustment updated';
+    END IF;
+
+    
+    SELECT v_success AS Success,
+           v_message AS Message;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `allergies` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `Allergen` varchar(255) NOT NULL,
+  `AllergenType` enum('Medication','Food','Environmental','Other') NOT NULL DEFAULT 'Other',
+  `Reaction` varchar(255) DEFAULT NULL,
+  `Severity` enum('Mild','Moderate','Severe','Anaphylaxis') DEFAULT 'Moderate',
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_Allergies_PatientId` (`PatientId`),
+  CONSTRAINT `FK_Allergies_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergiesCreate`(
+    IN p_PatientId    BIGINT UNSIGNED,
+    IN p_Allergen     VARCHAR(255),
+    IN p_AllergenType ENUM('Medication','Food','Environmental','Other'),
+    IN p_Reaction     VARCHAR(255),
+    IN p_Severity     ENUM('Mild','Moderate','Severe','Anaphylaxis'),
+    IN p_Notes        TEXT
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+    DECLARE v_new_id BIGINT UNSIGNED DEFAULT NULL;
+
+    
+    IF p_PatientId IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'PatientId is required';
+    END IF;
+
+    IF v_success = 1 AND (p_Allergen IS NULL OR p_Allergen = '') THEN
+        SET v_success = 0;
+        SET v_message = 'Allergen is required';
+    END IF;
+
+    IF v_success = 1 AND p_AllergenType IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'AllergenType is required';
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM patients
+        WHERE Id = p_PatientId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid PatientId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        INSERT INTO allergies (
+            PatientId, Allergen, AllergenType, Reaction, Severity, Notes
+        ) VALUES (
+            p_PatientId, p_Allergen, p_AllergenType,
+            p_Reaction, COALESCE(p_Severity, 'Moderate'), p_Notes
+        );
+
+        SET v_new_id = LAST_INSERT_ID();
+        SET v_message = 'Allergy created';
+    END IF;
+
+    SELECT v_success AS Success,
+           v_message AS Message,
+           v_new_id AS Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergiesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+
+    
+    SELECT COUNT(*) INTO v_exists
+    FROM allergies
+    WHERE Id = p_Id;
+
+    IF v_exists = 0 THEN
+        SET v_success = 0;
+        SET v_message = 'Allergy not found';
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        DELETE FROM allergies WHERE Id = p_Id;
+        SET v_message = 'Allergy deleted';
+    END IF;
+
+    SELECT v_success AS Success,
+           v_message AS Message;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergiesGetById`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT 
+        Id,
+        PatientId,
+        Allergen,
+        AllergenType,
+        Reaction,
+        Severity,
+        Notes,
+        Created
+    FROM allergies
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergiesUpdate`(
+    IN p_Id           BIGINT UNSIGNED,
+    IN p_PatientId    BIGINT UNSIGNED,
+    IN p_Allergen     VARCHAR(255),
+    IN p_AllergenType ENUM('Medication','Food','Environmental','Other'),
+    IN p_Reaction     VARCHAR(255),
+    IN p_Severity     ENUM('Mild','Moderate','Severe','Anaphylaxis'),
+    IN p_Notes        TEXT
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+
+    
+    SELECT COUNT(*) INTO v_exists
+    FROM allergies
+    WHERE Id = p_Id;
+
+    IF v_exists = 0 THEN
+        SET v_success = 0;
+        SET v_message = 'Allergy not found';
+    END IF;
+
+    
+    IF v_success = 1 AND p_PatientId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM patients
+        WHERE Id = p_PatientId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid PatientId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        UPDATE allergies
+        SET
+            PatientId    = COALESCE(p_PatientId, PatientId),
+            Allergen     = COALESCE(p_Allergen, Allergen),
+            AllergenType = COALESCE(p_AllergenType, AllergenType),
+            Reaction     = COALESCE(p_Reaction, Reaction),
+            Severity     = COALESCE(p_Severity, Severity),
+            Notes        = COALESCE(p_Notes, Notes)
+        WHERE Id = p_Id;
+
+        SET v_message = 'Allergy updated';
+    END IF;
+
+    SELECT v_success AS Success,
+           v_message AS Message;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `allergy_reactions` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `AllergyId` bigint(20) unsigned NOT NULL,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `ReactionType` varchar(100) NOT NULL,
+  `Severity` enum('Mild','Moderate','Severe','Critical') NOT NULL DEFAULT 'Moderate',
+  `ReactionDate` datetime NOT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_AllergyReactions_AllergyId` (`AllergyId`),
+  KEY `IX_AllergyReactions_PatientId` (`PatientId`),
+  CONSTRAINT `FK_AllergyReactions_Allergy` FOREIGN KEY (`AllergyId`) REFERENCES `allergies` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `FK_AllergyReactions_Patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergyReactionsCreate`(
+    IN p_AllergyId BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ReactionType VARCHAR(100),
+    IN p_Severity ENUM('Mild','Moderate','Severe','Critical'),
+    IN p_ReactionDate DATETIME,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_AllergyId IS NULL OR p_AllergyId = 0 THEN
+        SET v_Error = 'AllergyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ReactionType IS NULL OR p_ReactionType = '') THEN
+        SET v_Error = 'ReactionType is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ReactionDate IS NULL THEN
+        SET v_Error = 'ReactionDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO allergy_reactions
+        (AllergyId, PatientId, ReactionType, Severity, ReactionDate, Notes)
+        VALUES
+        (p_AllergyId, p_PatientId, p_ReactionType, p_Severity, p_ReactionDate, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergyReactionsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM allergy_reactions
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergyReactionsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM allergy_reactions
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergyReactionsListAll`()
+BEGIN
+    SELECT *
+    FROM allergy_reactions
+    ORDER BY ReactionDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergyReactionsListByAllergy`(
+    IN p_AllergyId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_AllergyId IS NULL OR p_AllergyId = 0 THEN
+        SET v_Error = 'Invalid AllergyId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM allergy_reactions
+        WHERE AllergyId = p_AllergyId
+        ORDER BY ReactionDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergyReactionsListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM allergy_reactions
+        WHERE PatientId = p_PatientId
+        ORDER BY ReactionDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergyReactionsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM allergy_reactions
+    WHERE
+        v_Search IS NULL
+        OR ReactionType LIKE v_Search
+        OR Severity LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY ReactionDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AllergyReactionsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_AllergyId BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ReactionType VARCHAR(100),
+    IN p_Severity ENUM('Mild','Moderate','Severe','Critical'),
+    IN p_ReactionDate DATETIME,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_AllergyId IS NULL OR p_AllergyId = 0) THEN
+        SET v_Error = 'AllergyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ReactionType IS NULL OR p_ReactionType = '') THEN
+        SET v_Error = 'ReactionType is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ReactionDate IS NULL THEN
+        SET v_Error = 'ReactionDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE allergy_reactions
+        SET
+            AllergyId = p_AllergyId,
+            PatientId = p_PatientId,
+            ReactionType = p_ReactionType,
+            Severity = p_Severity,
+            ReactionDate = p_ReactionDate,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `appointment_status_history` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `AppointmentId` bigint(20) unsigned NOT NULL,
+  `Status` varchar(50) NOT NULL,
+  `ChangedBy` bigint(20) unsigned NOT NULL,
+  `ChangeDate` datetime NOT NULL DEFAULT current_timestamp(),
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_AppointmentStatusHistory_AppointmentId` (`AppointmentId`),
+  KEY `IX_AppointmentStatusHistory_ChangedBy` (`ChangedBy`),
+  CONSTRAINT `FK_AppointmentStatusHistory_Appointment` FOREIGN KEY (`AppointmentId`) REFERENCES `appointments` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `FK_AppointmentStatusHistory_ChangedBy` FOREIGN KEY (`ChangedBy`) REFERENCES `users` (`Id`) ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `appointment_types` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `DefaultDurationMinutes` int(10) unsigned NOT NULL DEFAULT 15,
+  `Color` varchar(20) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `appointments` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `DoctorId` bigint(20) unsigned NOT NULL,
+  `FacilityId` bigint(20) unsigned NOT NULL,
+  `AppointmentDate` datetime NOT NULL,
+  `DurationMinutes` int(10) unsigned DEFAULT 15,
+  `Reason` varchar(255) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Status` enum('Scheduled','CheckedIn','Cancelled','NoShow','Completed') NOT NULL DEFAULT 'Scheduled',
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_Appointments_PatientId` (`PatientId`),
+  KEY `IX_Appointments_DoctorId` (`DoctorId`),
+  KEY `IX_Appointments_FacilityId` (`FacilityId`),
+  KEY `IX_Appointments_VisitId` (`VisitId`),
+  CONSTRAINT `FK_Appointments_Doctors` FOREIGN KEY (`DoctorId`) REFERENCES `doctors` (`Id`),
+  CONSTRAINT `FK_Appointments_Facilities` FOREIGN KEY (`FacilityId`) REFERENCES `facilities` (`Id`),
+  CONSTRAINT `FK_Appointments_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Appointments_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentsCreate`(
+    IN p_PatientId       BIGINT UNSIGNED,
+    IN p_DoctorId        BIGINT UNSIGNED,
+    IN p_FacilityId      BIGINT UNSIGNED,
+    IN p_AppointmentDate DATETIME,
+    IN p_DurationMinutes INT UNSIGNED,
+    IN p_Reason          VARCHAR(255),
+    IN p_Notes           TEXT,
+    IN p_Status          ENUM('Scheduled','CheckedIn','Cancelled','NoShow','Completed'),
+    IN p_VisitId         BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+    DECLARE v_new_id BIGINT UNSIGNED DEFAULT NULL;
+
+    
+    IF p_PatientId IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'PatientId is required';
+    END IF;
+
+    IF v_success = 1 AND p_DoctorId IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'DoctorId is required';
+    END IF;
+
+    IF v_success = 1 AND p_FacilityId IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'FacilityId is required';
+    END IF;
+
+    IF v_success = 1 AND p_AppointmentDate IS NULL THEN
+        SET v_success = 0;
+        SET v_message = 'AppointmentDate is required';
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        SELECT COUNT(*) INTO v_exists FROM patients WHERE Id = p_PatientId;
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid PatientId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        SELECT COUNT(*) INTO v_exists FROM doctors WHERE Id = p_DoctorId;
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid DoctorId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        SELECT COUNT(*) INTO v_exists FROM facilities WHERE Id = p_FacilityId;
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid FacilityId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM doctorfacilities
+        WHERE DoctorId = p_DoctorId
+          AND FacilityId = p_FacilityId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Doctor is not assigned to this Facility';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 AND p_VisitId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM visits
+        WHERE Id = p_VisitId
+          AND PatientId = p_PatientId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'VisitId does not belong to this Patient';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        INSERT INTO appointments (
+            PatientId, DoctorId, FacilityId, AppointmentDate,
+            DurationMinutes, Reason, Notes, Status, VisitId
+        ) VALUES (
+            p_PatientId, p_DoctorId, p_FacilityId, p_AppointmentDate,
+            COALESCE(p_DurationMinutes, 15), p_Reason, p_Notes,
+            COALESCE(p_Status, 'Scheduled'), p_VisitId
+        );
+
+        SET v_new_id = LAST_INSERT_ID();
+        SET v_message = 'Appointment created';
+    END IF;
+
+    SELECT v_success AS Success,
+           v_message AS Message,
+           v_new_id AS Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+
+    
+    SELECT COUNT(*) INTO v_exists FROM appointments WHERE Id = p_Id;
+
+    IF v_exists = 0 THEN
+        SET v_success = 0;
+        SET v_message = 'Appointment not found';
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        DELETE FROM appointments WHERE Id = p_Id;
+        SET v_message = 'Appointment deleted';
+    END IF;
+
+    SELECT v_success AS Success,
+           v_message AS Message;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentsGetById`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT
+        Id,
+        PatientId,
+        DoctorId,
+        FacilityId,
+        AppointmentDate,
+        DurationMinutes,
+        Reason,
+        Notes,
+        Status,
+        VisitId,
+        Created,
+        Updated
+    FROM appointments
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentStatusHistoryCreate`(
+    IN p_AppointmentId BIGINT UNSIGNED,
+    IN p_Status VARCHAR(50),
+    IN p_ChangedBy BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_AppointmentId IS NULL OR p_AppointmentId = 0 THEN
+        SET v_Error = 'AppointmentId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Status IS NULL OR p_Status = '') THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ChangedBy IS NULL OR p_ChangedBy = 0) THEN
+        SET v_Error = 'ChangedBy is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO appointment_status_history
+        (AppointmentId, Status, ChangedBy, Notes)
+        VALUES
+        (p_AppointmentId, p_Status, p_ChangedBy, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentStatusHistoryDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM appointment_status_history
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentStatusHistoryGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM appointment_status_history
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentStatusHistoryListAll`()
+BEGIN
+    SELECT *
+    FROM appointment_status_history
+    ORDER BY ChangeDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentStatusHistoryListByAppointment`(
+    IN p_AppointmentId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_AppointmentId IS NULL OR p_AppointmentId = 0 THEN
+        SET v_Error = 'Invalid AppointmentId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM appointment_status_history
+        WHERE AppointmentId = p_AppointmentId
+        ORDER BY ChangeDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentStatusHistoryListByUser`(
+    IN p_ChangedBy BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_ChangedBy IS NULL OR p_ChangedBy = 0 THEN
+        SET v_Error = 'Invalid ChangedBy';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM appointment_status_history
+        WHERE ChangedBy = p_ChangedBy
+        ORDER BY ChangeDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentStatusHistorySearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM appointment_status_history
+    WHERE
+        v_Search IS NULL
+        OR Status LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY ChangeDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentStatusHistoryUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_AppointmentId BIGINT UNSIGNED,
+    IN p_Status VARCHAR(50),
+    IN p_ChangedBy BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_AppointmentId IS NULL OR p_AppointmentId = 0) THEN
+        SET v_Error = 'AppointmentId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Status IS NULL OR p_Status = '') THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ChangedBy IS NULL OR p_ChangedBy = 0) THEN
+        SET v_Error = 'ChangedBy is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE appointment_status_history
+        SET
+            AppointmentId = p_AppointmentId,
+            Status = p_Status,
+            ChangedBy = p_ChangedBy,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentsUpdate`(
+    IN p_Id             BIGINT UNSIGNED,
+    IN p_PatientId      BIGINT UNSIGNED,
+    IN p_DoctorId       BIGINT UNSIGNED,
+    IN p_FacilityId     BIGINT UNSIGNED,
+    IN p_AppointmentDate DATETIME,
+    IN p_DurationMinutes INT UNSIGNED,
+    IN p_Reason         VARCHAR(255),
+    IN p_Notes          TEXT,
+    IN p_Status         ENUM('Scheduled','CheckedIn','Cancelled','NoShow','Completed'),
+    IN p_VisitId        BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+
+    
+    SELECT COUNT(*) INTO v_exists FROM appointments WHERE Id = p_Id;
+    IF v_exists = 0 THEN
+        SET v_success = 0;
+        SET v_message = 'Appointment not found';
+    END IF;
+
+    
+    IF v_success = 1 AND p_PatientId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists FROM patients WHERE Id = p_PatientId;
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid PatientId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 AND p_DoctorId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists FROM doctors WHERE Id = p_DoctorId;
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid DoctorId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 AND p_FacilityId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists FROM facilities WHERE Id = p_FacilityId;
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid FacilityId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 AND p_DoctorId IS NOT NULL AND p_FacilityId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM doctorfacilities
+        WHERE DoctorId = p_DoctorId
+          AND FacilityId = p_FacilityId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Doctor is not assigned to this Facility';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 AND p_VisitId IS NOT NULL AND p_PatientId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM visits
+        WHERE Id = p_VisitId
+          AND PatientId = p_PatientId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'VisitId does not belong to this Patient';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        UPDATE appointments
+        SET
+            PatientId       = COALESCE(p_PatientId, PatientId),
+            DoctorId        = COALESCE(p_DoctorId, DoctorId),
+            FacilityId      = COALESCE(p_FacilityId, FacilityId),
+            AppointmentDate = COALESCE(p_AppointmentDate, AppointmentDate),
+            DurationMinutes = COALESCE(p_DurationMinutes, DurationMinutes),
+            Reason          = COALESCE(p_Reason, Reason),
+            Notes           = COALESCE(p_Notes, Notes),
+            Status          = COALESCE(p_Status, Status),
+            VisitId         = COALESCE(p_VisitId, VisitId)
+        WHERE Id = p_Id;
+
+        SET v_message = 'Appointment updated';
+    END IF;
+
+    SELECT v_success AS Success,
+           v_message AS Message;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentTypesCreate`(
+    IN p_Name VARCHAR(100),
+    IN p_DefaultDurationMinutes INT UNSIGNED,
+    IN p_Color VARCHAR(20),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DefaultDurationMinutes IS NULL OR p_DefaultDurationMinutes = 0) THEN
+        SET v_Error = 'DefaultDurationMinutes is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO appointment_types
+        (Name, DefaultDurationMinutes, Color, Active)
+        VALUES
+        (p_Name, p_DefaultDurationMinutes, p_Color, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentTypesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE appointment_types
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentTypesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM appointment_types
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentTypesList`()
+BEGIN
+    SELECT *
+    FROM appointment_types
+    WHERE Active = 1
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentTypesListAll`()
+BEGIN
+    SELECT *
+    FROM appointment_types
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentTypesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM appointment_types
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Color LIKE v_Search
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AppointmentTypesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_DefaultDurationMinutes INT UNSIGNED,
+    IN p_Color VARCHAR(20),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DefaultDurationMinutes IS NULL OR p_DefaultDurationMinutes = 0) THEN
+        SET v_Error = 'DefaultDurationMinutes is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE appointment_types
+        SET
+            Name = p_Name,
+            DefaultDurationMinutes = p_DefaultDurationMinutes,
+            Color = p_Color,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `audit_log` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `UserId` bigint(20) unsigned DEFAULT NULL,
+  `Action` varchar(100) NOT NULL,
+  `TargetTable` varchar(100) NOT NULL,
+  `TargetId` bigint(20) unsigned DEFAULT NULL,
+  `IpAddress` varchar(45) DEFAULT NULL,
+  `Created` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `fk_auditlog_user` (`UserId`),
+  CONSTRAINT `fk_auditlog_user` FOREIGN KEY (`UserId`) REFERENCES `portal_users` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AuditLogCreate`(
+    IN p_UserId      BIGINT UNSIGNED,
+    IN p_Action      VARCHAR(100),
+    IN p_TargetTable VARCHAR(100),
+    IN p_TargetId    BIGINT UNSIGNED,
+    IN p_IpAddress   VARCHAR(45)
+)
+BEGIN
+    DECLARE v_exists INT DEFAULT 0;
+    DECLARE v_success TINYINT UNSIGNED DEFAULT 1;
+    DECLARE v_message VARCHAR(255) DEFAULT '';
+    DECLARE v_new_id BIGINT UNSIGNED DEFAULT NULL;
+
+    
+    IF p_Action IS NULL OR p_Action = '' THEN
+        SET v_success = 0;
+        SET v_message = 'Action is required';
+    END IF;
+
+    IF v_success = 1 AND (p_TargetTable IS NULL OR p_TargetTable = '') THEN
+        SET v_success = 0;
+        SET v_message = 'TargetTable is required';
+    END IF;
+
+    
+    IF v_success = 1 AND p_UserId IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM portal_users
+        WHERE Id = p_UserId;
+
+        IF v_exists = 0 THEN
+            SET v_success = 0;
+            SET v_message = 'Invalid UserId';
+        END IF;
+    END IF;
+
+    
+    IF v_success = 1 THEN
+        INSERT INTO audit_log (
+            UserId, Action, TargetTable, TargetId, IpAddress
+        ) VALUES (
+            p_UserId, p_Action, p_TargetTable, p_TargetId, p_IpAddress
+        );
+
+        SET v_new_id = LAST_INSERT_ID();
+        SET v_message = 'Audit entry created';
+    END IF;
+
+    SELECT v_success AS Success,
+           v_message AS Message,
+           v_new_id AS Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AuditLogGetById`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT
+        Id,
+        UserId,
+        Action,
+        TargetTable,
+        TargetId,
+        IpAddress,
+        Created
+    FROM audit_log
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AuditLogGetByTable`(
+    IN p_TargetTable VARCHAR(100)
+)
+BEGIN
+    SELECT *
+    FROM audit_log
+    WHERE TargetTable = p_TargetTable
+    ORDER BY Created DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AuditLogGetByTargetId`(
+    IN p_TargetTable VARCHAR(100),
+    IN p_TargetId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM audit_log
+    WHERE TargetTable = p_TargetTable
+      AND TargetId = p_TargetId
+    ORDER BY Created DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `AuditLogGetByUser`(
+    IN p_UserId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM audit_log
+    WHERE UserId = p_UserId
+    ORDER BY Created DESC;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `billing_codes` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Code` varchar(20) NOT NULL,
+  `Description` varchar(255) NOT NULL,
+  `CodeType` enum('CPT','HCPCS','ICD10','Custom') NOT NULL DEFAULT 'CPT',
+  `DefaultAmount` decimal(10,2) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `BillingCodesCreate`(
+    IN  p_Code          VARCHAR(20),
+    IN  p_Description   VARCHAR(255),
+    IN  p_CodeType      ENUM('CPT','HCPCS','ICD10','Custom'),
+    IN  p_DefaultAmount DECIMAL(10,2),
+    OUT p_Id            BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_Code IS NULL OR p_Code = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Description IS NULL OR p_Description = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_CodeType IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO billing_codes (
+            Code,
+            Description,
+            CodeType,
+            DefaultAmount,
+            Active
+        )
+        VALUES (
+            p_Code,
+            p_Description,
+            p_CodeType,
+            p_DefaultAmount,
+            1
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `BillingCodesDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM billing_codes
+        WHERE Id = p_Id AND Active = 1;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Billing code not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE billing_codes
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Billing code deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `BillingCodesGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Code VARCHAR(20),
+    OUT p_Description VARCHAR(255),
+    OUT p_CodeType ENUM('CPT','HCPCS','ICD10','Custom'),
+    OUT p_DefaultAmount DECIMAL(10,2),
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Code = NULL;
+    SET p_Description = NULL;
+    SET p_CodeType = NULL;
+    SET p_DefaultAmount = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Code,
+            Description,
+            CodeType,
+            DefaultAmount,
+            Active
+        INTO
+            p_Code,
+            p_Description,
+            p_CodeType,
+            p_DefaultAmount,
+            p_Active
+        FROM billing_codes
+        WHERE Id = p_Id;
+
+        IF p_Code IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `BillingCodesList`()
+BEGIN
+    SELECT
+        Id,
+        Code,
+        Description,
+        CodeType,
+        DefaultAmount,
+        Active,
+        Created,
+        Updated
+    FROM billing_codes
+    WHERE Active = 1
+    ORDER BY Code;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `BillingCodesUpdate`(
+    IN  p_Id            BIGINT UNSIGNED,
+    IN  p_Code          VARCHAR(20),
+    IN  p_Description   VARCHAR(255),
+    IN  p_CodeType      ENUM('CPT','HCPCS','ICD10','Custom'),
+    IN  p_DefaultAmount DECIMAL(10,2),
+    OUT p_Success       BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Code IS NULL OR p_Code = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Description IS NULL OR p_Description = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_CodeType IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM billing_codes
+        WHERE Id = p_Id AND Active = 1;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE billing_codes
+        SET
+            Code          = p_Code,
+            Description   = p_Description,
+            CodeType      = p_CodeType,
+            DefaultAmount = p_DefaultAmount
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `care_plan_interventions` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `CarePlanId` bigint(20) unsigned NOT NULL,
+  `Description` text NOT NULL,
+  `Frequency` varchar(100) DEFAULT NULL,
+  `TargetDate` date DEFAULT NULL,
+  `CompletedDate` date DEFAULT NULL,
+  `Status` enum('Pending','InProgress','Completed','Cancelled') NOT NULL DEFAULT 'Pending',
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_CarePlanInterventions_CarePlanId` (`CarePlanId`),
+  CONSTRAINT `FK_CarePlanInterventions_CarePlans` FOREIGN KEY (`CarePlanId`) REFERENCES `care_plans` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `care_plan_reviews` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `CarePlanId` bigint(20) unsigned NOT NULL,
+  `ReviewDate` datetime NOT NULL,
+  `Reviewer` varchar(255) DEFAULT NULL,
+  `Summary` text NOT NULL,
+  `NextSteps` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_CarePlanReviews_CarePlanId` (`CarePlanId`),
+  CONSTRAINT `FK_CarePlanReviews_CarePlans` FOREIGN KEY (`CarePlanId`) REFERENCES `care_plans` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `care_plans` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `ConditionTypeId` bigint(20) unsigned DEFAULT NULL,
+  `Title` varchar(255) NOT NULL,
+  `Goal` text NOT NULL,
+  `StartDate` date NOT NULL,
+  `EndDate` date DEFAULT NULL,
+  `Status` enum('Active','Completed','Cancelled') NOT NULL DEFAULT 'Active',
+  `Notes` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_CarePlans_PatientId` (`PatientId`),
+  KEY `IX_CarePlans_ConditionTypeId` (`ConditionTypeId`),
+  CONSTRAINT `FK_CarePlans_ConditionTypes` FOREIGN KEY (`ConditionTypeId`) REFERENCES `condition_types` (`Id`),
+  CONSTRAINT `FK_CarePlans_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `care_team` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `ProviderId` bigint(20) unsigned NOT NULL,
+  `Role` varchar(100) NOT NULL,
+  `StartDate` date NOT NULL DEFAULT curdate(),
+  `EndDate` date DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_CareTeam_PatientId` (`PatientId`),
+  KEY `IX_CareTeam_ProviderId` (`ProviderId`),
+  CONSTRAINT `FK_CareTeam_Patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `FK_CareTeam_Provider` FOREIGN KEY (`ProviderId`) REFERENCES `doctors` (`Id`) ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanCreate`(
+    IN  p_PatientId       BIGINT UNSIGNED,
+    IN  p_ConditionTypeId BIGINT UNSIGNED,
+    IN  p_Title           VARCHAR(255),
+    IN  p_Goal            TEXT,
+    IN  p_StartDate       DATE,
+    IN  p_EndDate         DATE,
+    IN  p_Status          ENUM('Active','Completed','Cancelled'),
+    IN  p_Notes           TEXT,
+    OUT p_Id              BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_final_end DATE;
+
+    SET p_Id = 0;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Title IS NULL OR p_Title = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Goal IS NULL OR p_Goal = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_StartDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Status IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Status = 'Active' THEN
+        SET v_final_end = NULL;
+    ELSE
+        IF p_EndDate IS NULL THEN
+            SET v_final_end = CURRENT_DATE;
+        ELSE
+            SET v_final_end = p_EndDate;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO care_plans (
+            PatientId,
+            ConditionTypeId,
+            Title,
+            Goal,
+            StartDate,
+            EndDate,
+            Status,
+            Notes,
+            Active
+        )
+        VALUES (
+            p_PatientId,
+            p_ConditionTypeId,
+            p_Title,
+            p_Goal,
+            p_StartDate,
+            v_final_end,
+            p_Status,
+            p_Notes,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM care_plans
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE care_plans
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_PatientId BIGINT UNSIGNED,
+    OUT p_ConditionTypeId BIGINT UNSIGNED,
+    OUT p_Title VARCHAR(255),
+    OUT p_Goal TEXT,
+    OUT p_StartDate DATE,
+    OUT p_EndDate DATE,
+    OUT p_Status ENUM('Active','Completed','Cancelled'),
+    OUT p_Notes TEXT,
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_PatientId = NULL;
+    SET p_ConditionTypeId = NULL;
+    SET p_Title = NULL;
+    SET p_Goal = NULL;
+    SET p_StartDate = NULL;
+    SET p_EndDate = NULL;
+    SET p_Status = NULL;
+    SET p_Notes = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            PatientId,
+            ConditionTypeId,
+            Title,
+            Goal,
+            StartDate,
+            EndDate,
+            Status,
+            Notes,
+            Active
+        INTO
+            p_PatientId,
+            p_ConditionTypeId,
+            p_Title,
+            p_Goal,
+            p_StartDate,
+            p_EndDate,
+            p_Status,
+            p_Notes,
+            p_Active
+        FROM care_plans
+        WHERE Id = p_Id;
+
+        IF p_PatientId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanInterventionsCreate`(
+    IN  p_CarePlanId    BIGINT UNSIGNED,
+    IN  p_Description   TEXT,
+    IN  p_Frequency     VARCHAR(100),
+    IN  p_TargetDate    DATE,
+    IN  p_CompletedDate DATE,
+    IN  p_Status        ENUM('Pending','InProgress','Completed','Cancelled'),
+    OUT p_Id            BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_final_completed DATE;
+
+    SET p_Id = 0;
+
+    IF p_CarePlanId IS NULL OR p_CarePlanId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Description IS NULL OR p_Description = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Status IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Status = 'Completed' THEN
+        IF p_CompletedDate IS NULL THEN
+            SET v_final_completed = CURRENT_DATE;
+        ELSE
+            SET v_final_completed = p_CompletedDate;
+        END IF;
+    ELSE
+        SET v_final_completed = NULL;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO care_plan_interventions (
+            CarePlanId,
+            Description,
+            Frequency,
+            TargetDate,
+            CompletedDate,
+            Status,
+            Active
+        )
+        VALUES (
+            p_CarePlanId,
+            p_Description,
+            p_Frequency,
+            p_TargetDate,
+            v_final_completed,
+            p_Status,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanInterventionsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM care_plan_interventions
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE care_plan_interventions
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanInterventionsGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_CarePlanId BIGINT UNSIGNED,
+    OUT p_Description TEXT,
+    OUT p_Frequency VARCHAR(100),
+    OUT p_TargetDate DATE,
+    OUT p_CompletedDate DATE,
+    OUT p_Status ENUM('Pending','InProgress','Completed','Cancelled'),
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_CarePlanId = NULL;
+    SET p_Description = NULL;
+    SET p_Frequency = NULL;
+    SET p_TargetDate = NULL;
+    SET p_CompletedDate = NULL;
+    SET p_Status = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            CarePlanId,
+            Description,
+            Frequency,
+            TargetDate,
+            CompletedDate,
+            Status,
+            Active
+        INTO
+            p_CarePlanId,
+            p_Description,
+            p_Frequency,
+            p_TargetDate,
+            p_CompletedDate,
+            p_Status,
+            p_Active
+        FROM care_plan_interventions
+        WHERE Id = p_Id;
+
+        IF p_CarePlanId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanInterventionsListByCarePlan`(
+    IN p_CarePlanId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_CarePlanId IS NULL OR p_CarePlanId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            CarePlanId,
+            Description,
+            Frequency,
+            TargetDate,
+            CompletedDate,
+            Status,
+            Active
+        FROM care_plan_interventions
+        WHERE CarePlanId = p_CarePlanId
+          AND Active = TRUE
+        ORDER BY Id;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanInterventionsUpdate`(
+    IN  p_Id            BIGINT UNSIGNED,
+    IN  p_Description   TEXT,
+    IN  p_Frequency     VARCHAR(100),
+    IN  p_TargetDate    DATE,
+    IN  p_CompletedDate DATE,
+    IN  p_Status        ENUM('Pending','InProgress','Completed','Cancelled'),
+    OUT p_Success       BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_old_CarePlanId BIGINT UNSIGNED;
+    DECLARE v_old_Status ENUM('Pending','InProgress','Completed','Cancelled');
+    DECLARE v_final_completed DATE;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Description IS NULL OR p_Description = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Status IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT CarePlanId, Status
+        INTO v_old_CarePlanId, v_old_Status
+        FROM care_plan_interventions
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_old_CarePlanId IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        IF p_Status = 'Completed' THEN
+            IF p_CompletedDate IS NULL THEN
+                SET v_final_completed = CURRENT_DATE;
+            ELSE
+                SET v_final_completed = p_CompletedDate;
+            END IF;
+        ELSE
+            SET v_final_completed = NULL;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE care_plan_interventions
+        SET
+            Description   = p_Description,
+            Frequency     = p_Frequency,
+            TargetDate    = p_TargetDate,
+            CompletedDate = v_final_completed,
+            Status        = p_Status
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            PatientId,
+            ConditionTypeId,
+            Title,
+            Goal,
+            StartDate,
+            EndDate,
+            Status,
+            Notes,
+            Active
+        FROM care_plans
+        WHERE PatientId = p_PatientId
+          AND Active = TRUE
+        ORDER BY StartDate DESC;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanReviewsCreate`(
+    IN  p_CarePlanId BIGINT UNSIGNED,
+    IN  p_ReviewDate DATETIME,
+    IN  p_Reviewer   VARCHAR(255),
+    IN  p_Summary    TEXT,
+    IN  p_NextSteps  TEXT,
+    OUT p_Id         BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_CarePlanId IS NULL OR p_CarePlanId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ReviewDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Summary IS NULL OR p_Summary = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO care_plan_reviews (
+            CarePlanId,
+            ReviewDate,
+            Reviewer,
+            Summary,
+            NextSteps,
+            Active
+        )
+        VALUES (
+            p_CarePlanId,
+            p_ReviewDate,
+            p_Reviewer,
+            p_Summary,
+            p_NextSteps,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanReviewsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM care_plan_reviews
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE care_plan_reviews
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanReviewsGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_CarePlanId BIGINT UNSIGNED,
+    OUT p_ReviewDate DATETIME,
+    OUT p_Reviewer   VARCHAR(255),
+    OUT p_Summary    TEXT,
+    OUT p_NextSteps  TEXT,
+    OUT p_Active     BOOLEAN,
+    OUT p_Found      BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_CarePlanId = NULL;
+    SET p_ReviewDate = NULL;
+    SET p_Reviewer   = NULL;
+    SET p_Summary    = NULL;
+    SET p_NextSteps  = NULL;
+    SET p_Active     = NULL;
+    SET p_Found      = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            CarePlanId,
+            ReviewDate,
+            Reviewer,
+            Summary,
+            NextSteps,
+            Active
+        INTO
+            p_CarePlanId,
+            p_ReviewDate,
+            p_Reviewer,
+            p_Summary,
+            p_NextSteps,
+            p_Active
+        FROM care_plan_reviews
+        WHERE Id = p_Id;
+
+        IF p_CarePlanId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanReviewsListByCarePlan`(
+    IN p_CarePlanId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_CarePlanId IS NULL OR p_CarePlanId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            CarePlanId,
+            ReviewDate,
+            Reviewer,
+            Summary,
+            NextSteps,
+            Active
+        FROM care_plan_reviews
+        WHERE CarePlanId = p_CarePlanId
+          AND Active = TRUE
+        ORDER BY ReviewDate DESC;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanReviewsUpdate`(
+    IN  p_Id         BIGINT UNSIGNED,
+    IN  p_ReviewDate DATETIME,
+    IN  p_Reviewer   VARCHAR(255),
+    IN  p_Summary    TEXT,
+    IN  p_NextSteps  TEXT,
+    OUT p_Success    BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ReviewDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Summary IS NULL OR p_Summary = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM care_plan_reviews
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE care_plan_reviews
+        SET
+            ReviewDate = p_ReviewDate,
+            Reviewer   = p_Reviewer,
+            Summary    = p_Summary,
+            NextSteps  = p_NextSteps
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CarePlanUpdate`(
+    IN  p_Id              BIGINT UNSIGNED,
+    IN  p_Title           VARCHAR(255),
+    IN  p_Goal            TEXT,
+    IN  p_StartDate       DATE,
+    IN  p_EndDate         DATE,
+    IN  p_Status          ENUM('Active','Completed','Cancelled'),
+    IN  p_Notes           TEXT,
+    OUT p_Success         BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+    DECLARE v_final_end DATE;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Title IS NULL OR p_Title = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Goal IS NULL OR p_Goal = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_StartDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Status IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM care_plans
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        IF p_Status = 'Active' THEN
+            SET v_final_end = NULL;
+        ELSE
+            IF p_EndDate IS NULL THEN
+                SET v_final_end = CURRENT_DATE;
+            ELSE
+                SET v_final_end = p_EndDate;
+            END IF;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE care_plans
+        SET
+            Title     = p_Title,
+            Goal      = p_Goal,
+            StartDate = p_StartDate,
+            EndDate   = v_final_end,
+            Status    = p_Status,
+            Notes     = p_Notes
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CareTeamCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ProviderId BIGINT UNSIGNED,
+    IN p_Role VARCHAR(100),
+    IN p_StartDate DATE,
+    IN p_EndDate DATE,
+    IN p_Active TINYINT(1),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ProviderId IS NULL OR p_ProviderId = 0) THEN
+        SET v_Error = 'ProviderId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Role IS NULL OR p_Role = '') THEN
+        SET v_Error = 'Role is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO care_team
+        (PatientId, ProviderId, Role, StartDate, EndDate, Active, Notes)
+        VALUES
+        (p_PatientId, p_ProviderId, p_Role, p_StartDate, p_EndDate, p_Active, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CareTeamDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE care_team
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CareTeamGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM care_team
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CareTeamListAll`()
+BEGIN
+    SELECT *
+    FROM care_team
+    ORDER BY Active DESC, PatientId, ProviderId;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CareTeamListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM care_team
+        WHERE PatientId = p_PatientId
+        ORDER BY Active DESC, Role, StartDate DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CareTeamListByProvider`(
+    IN p_ProviderId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_ProviderId IS NULL OR p_ProviderId = 0 THEN
+        SET v_Error = 'Invalid ProviderId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM care_team
+        WHERE ProviderId = p_ProviderId
+        ORDER BY Active DESC, Role, StartDate DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CareTeamSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM care_team
+    WHERE
+        v_Search IS NULL
+        OR Role LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY Active DESC, Role, StartDate DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CareTeamUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ProviderId BIGINT UNSIGNED,
+    IN p_Role VARCHAR(100),
+    IN p_StartDate DATE,
+    IN p_EndDate DATE,
+    IN p_Active TINYINT(1),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ProviderId IS NULL OR p_ProviderId = 0) THEN
+        SET v_Error = 'ProviderId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Role IS NULL OR p_Role = '') THEN
+        SET v_Error = 'Role is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE care_team
+        SET
+            PatientId = p_PatientId,
+            ProviderId = p_ProviderId,
+            Role = p_Role,
+            StartDate = p_StartDate,
+            EndDate = p_EndDate,
+            Active = p_Active,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `charge_adjustments` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ChargeId` bigint(20) unsigned NOT NULL,
+  `AdjustmentDate` datetime NOT NULL,
+  `Type` enum('Contractual','WriteOff','Correction','Refund','Goodwill','Other') NOT NULL,
+  `Amount` decimal(10,2) NOT NULL,
+  `Notes` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `ChargeId` (`ChargeId`),
+  CONSTRAINT `fk_charge_adjustments_charge` FOREIGN KEY (`ChargeId`) REFERENCES `charges` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `charge_master` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Code` varchar(20) NOT NULL,
+  `Description` varchar(255) NOT NULL,
+  `DefaultPrice` decimal(10,2) NOT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeAdjustmentsCreate`(
+    IN  p_ChargeId       BIGINT UNSIGNED,
+    IN  p_AdjustmentDate DATETIME,
+    IN  p_Type           ENUM('Contractual','WriteOff','Correction','Refund','Goodwill','Other'),
+    IN  p_Amount         DECIMAL(10,2),
+    IN  p_Notes          TEXT,
+    OUT p_Id             BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_ChargeId IS NULL OR p_ChargeId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_AdjustmentDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Type IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Amount IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO charge_adjustments (
+            ChargeId,
+            AdjustmentDate,
+            Type,
+            Amount,
+            Notes,
+            Active
+        )
+        VALUES (
+            p_ChargeId,
+            p_AdjustmentDate,
+            p_Type,
+            p_Amount,
+            p_Notes,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeAdjustmentsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM charge_adjustments
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Adjustment not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE charge_adjustments
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Adjustment deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeAdjustmentsGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_ChargeId BIGINT UNSIGNED,
+    OUT p_AdjustmentDate DATETIME,
+    OUT p_Type ENUM('Contractual','WriteOff','Correction','Refund','Goodwill','Other'),
+    OUT p_Amount DECIMAL(10,2),
+    OUT p_Notes TEXT,
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_ChargeId = NULL;
+    SET p_AdjustmentDate = NULL;
+    SET p_Type = NULL;
+    SET p_Amount = NULL;
+    SET p_Notes = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            ChargeId,
+            AdjustmentDate,
+            Type,
+            Amount,
+            Notes,
+            Active
+        INTO
+            p_ChargeId,
+            p_AdjustmentDate,
+            p_Type,
+            p_Amount,
+            p_Notes,
+            p_Active
+        FROM charge_adjustments
+        WHERE Id = p_Id;
+
+        IF p_ChargeId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeAdjustmentsListByCharge`(
+    IN p_ChargeId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_ChargeId IS NULL OR p_ChargeId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            ChargeId,
+            AdjustmentDate,
+            Type,
+            Amount,
+            Notes,
+            Active
+        FROM charge_adjustments
+        WHERE ChargeId = p_ChargeId
+          AND Active = TRUE
+        ORDER BY AdjustmentDate DESC;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeAdjustmentsUpdate`(
+    IN  p_Id             BIGINT UNSIGNED,
+    IN  p_AdjustmentDate DATETIME,
+    IN  p_Type           ENUM('Contractual','WriteOff','Correction','Refund','Goodwill','Other'),
+    IN  p_Amount         DECIMAL(10,2),
+    IN  p_Notes          TEXT,
+    OUT p_Success        BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_AdjustmentDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Type IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Amount IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM charge_adjustments
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE charge_adjustments
+        SET
+            AdjustmentDate = p_AdjustmentDate,
+            Type           = p_Type,
+            Amount         = p_Amount,
+            Notes          = p_Notes
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeMasterCreate`(
+    IN  p_Code         VARCHAR(20),
+    IN  p_Description  VARCHAR(255),
+    IN  p_DefaultPrice DECIMAL(10,2),
+    OUT p_Id           BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_Code IS NULL OR p_Code = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Description IS NULL OR p_Description = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_DefaultPrice IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO charge_master (
+            Code,
+            Description,
+            DefaultPrice,
+            Active
+        )
+        VALUES (
+            p_Code,
+            p_Description,
+            p_DefaultPrice,
+            1
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeMasterDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM charge_master
+        WHERE Id = p_Id AND Active = 1;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Charge master entry not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE charge_master
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Charge master entry deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeMasterGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Code VARCHAR(20),
+    OUT p_Description VARCHAR(255),
+    OUT p_DefaultPrice DECIMAL(10,2),
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Code = NULL;
+    SET p_Description = NULL;
+    SET p_DefaultPrice = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Code,
+            Description,
+            DefaultPrice,
+            Active
+        INTO
+            p_Code,
+            p_Description,
+            p_DefaultPrice,
+            p_Active
+        FROM charge_master
+        WHERE Id = p_Id;
+
+        IF p_Code IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeMasterList`()
+BEGIN
+    SELECT
+        Id,
+        Code,
+        Description,
+        DefaultPrice,
+        Active
+    FROM charge_master
+    WHERE Active = 1
+    ORDER BY Code;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargeMasterUpdate`(
+    IN  p_Id           BIGINT UNSIGNED,
+    IN  p_Code         VARCHAR(20),
+    IN  p_Description  VARCHAR(255),
+    IN  p_DefaultPrice DECIMAL(10,2),
+    OUT p_Success      BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Code IS NULL OR p_Code = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Description IS NULL OR p_Description = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_DefaultPrice IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM charge_master
+        WHERE Id = p_Id AND Active = 1;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE charge_master
+        SET
+            Code         = p_Code,
+            Description  = p_Description,
+            DefaultPrice = p_DefaultPrice
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `charges` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `BillingCodeId` bigint(20) unsigned NOT NULL,
+  `ChargeDate` datetime NOT NULL,
+  `Amount` decimal(10,2) NOT NULL,
+  `Notes` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Charges_PatientId` (`PatientId`),
+  KEY `IX_Charges_VisitId` (`VisitId`),
+  KEY `IX_Charges_BillingCodeId` (`BillingCodeId`),
+  CONSTRAINT `FK_Charges_BillingCodes` FOREIGN KEY (`BillingCodeId`) REFERENCES `billing_codes` (`Id`),
+  CONSTRAINT `FK_Charges_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Charges_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargesCreate`(
+    IN  p_PatientId     BIGINT UNSIGNED,
+    IN  p_VisitId       BIGINT UNSIGNED,
+    IN  p_BillingCodeId BIGINT UNSIGNED,
+    IN  p_ChargeDate    DATETIME,
+    IN  p_Amount        DECIMAL(10,2),
+    IN  p_Notes         TEXT,
+    OUT p_Id            BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_BillingCodeId IS NULL OR p_BillingCodeId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ChargeDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Amount IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO charges (
+            PatientId,
+            VisitId,
+            BillingCodeId,
+            ChargeDate,
+            Amount,
+            Notes,
+            Active
+        )
+        VALUES (
+            p_PatientId,
+            p_VisitId,
+            p_BillingCodeId,
+            p_ChargeDate,
+            p_Amount,
+            p_Notes,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargesDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM charges
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Charge not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE charges
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Charge deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargesGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_PatientId BIGINT UNSIGNED,
+    OUT p_VisitId BIGINT UNSIGNED,
+    OUT p_BillingCodeId BIGINT UNSIGNED,
+    OUT p_ChargeDate DATETIME,
+    OUT p_Amount DECIMAL(10,2),
+    OUT p_Notes TEXT,
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_PatientId = NULL;
+    SET p_VisitId = NULL;
+    SET p_BillingCodeId = NULL;
+    SET p_ChargeDate = NULL;
+    SET p_Amount = NULL;
+    SET p_Notes = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            PatientId,
+            VisitId,
+            BillingCodeId,
+            ChargeDate,
+            Amount,
+            Notes,
+            Active
+        INTO
+            p_PatientId,
+            p_VisitId,
+            p_BillingCodeId,
+            p_ChargeDate,
+            p_Amount,
+            p_Notes,
+            p_Active
+        FROM charges
+        WHERE Id = p_Id;
+
+        IF p_PatientId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargesListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            PatientId,
+            VisitId,
+            BillingCodeId,
+            ChargeDate,
+            Amount,
+            Notes,
+            Active
+        FROM charges
+        WHERE PatientId = p_PatientId
+          AND Active = TRUE
+        ORDER BY ChargeDate DESC;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ChargesUpdate`(
+    IN  p_Id            BIGINT UNSIGNED,
+    IN  p_VisitId       BIGINT UNSIGNED,
+    IN  p_BillingCodeId BIGINT UNSIGNED,
+    IN  p_ChargeDate    DATETIME,
+    IN  p_Amount        DECIMAL(10,2),
+    IN  p_Notes         TEXT,
+    OUT p_Success       BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_BillingCodeId IS NULL OR p_BillingCodeId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ChargeDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Amount IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM charges
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE charges
+        SET
+            VisitId       = p_VisitId,
+            BillingCodeId = p_BillingCodeId,
+            ChargeDate    = p_ChargeDate,
+            Amount        = p_Amount,
+            Notes         = p_Notes
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `claim_diagnoses` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ClaimId` bigint(20) unsigned NOT NULL,
+  `ICD10` varchar(10) NOT NULL,
+  `Sequence` int(10) unsigned NOT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_ClaimDiagnoses_ClaimId` (`ClaimId`),
+  CONSTRAINT `FK_ClaimDiagnoses_Claims` FOREIGN KEY (`ClaimId`) REFERENCES `claims` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `claim_line_items` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ClaimId` bigint(20) unsigned NOT NULL,
+  `BillingCodeId` bigint(20) unsigned NOT NULL,
+  `DiagnosisPointer` varchar(10) DEFAULT NULL,
+  `Quantity` int(10) unsigned NOT NULL DEFAULT 1,
+  `UnitPrice` decimal(10,2) NOT NULL,
+  `LineTotal` decimal(10,2) NOT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_ClaimLineItems_ClaimId` (`ClaimId`),
+  KEY `FK_ClaimLineItems_BillingCodes` (`BillingCodeId`),
+  CONSTRAINT `FK_ClaimLineItems_BillingCodes` FOREIGN KEY (`BillingCodeId`) REFERENCES `billing_codes` (`Id`),
+  CONSTRAINT `FK_ClaimLineItems_Claims` FOREIGN KEY (`ClaimId`) REFERENCES `claims` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `claim_status_history` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ClaimId` bigint(20) unsigned NOT NULL,
+  `Status` enum('Open','Submitted','Rejected','Paid','Denied','Closed') NOT NULL,
+  `StatusDate` datetime NOT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_ClaimStatusHistory_ClaimId` (`ClaimId`),
+  CONSTRAINT `FK_ClaimStatusHistory_Claims` FOREIGN KEY (`ClaimId`) REFERENCES `claims` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimDiagnosesCreate`(
+    IN  p_ClaimId  BIGINT UNSIGNED,
+    IN  p_ICD10    VARCHAR(10),
+    IN  p_Sequence INT UNSIGNED,
+    OUT p_Id       BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_ClaimId IS NULL OR p_ClaimId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ICD10 IS NULL OR p_ICD10 = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Sequence IS NULL OR p_Sequence = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO claim_diagnoses (
+            ClaimId,
+            ICD10,
+            Sequence,
+            Active
+        )
+        VALUES (
+            p_ClaimId,
+            p_ICD10,
+            p_Sequence,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimDiagnosesDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM claim_diagnoses
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Diagnosis not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE claim_diagnoses
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Diagnosis deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimDiagnosesGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_ClaimId BIGINT UNSIGNED,
+    OUT p_ICD10 VARCHAR(10),
+    OUT p_Sequence INT UNSIGNED,
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_ClaimId = NULL;
+    SET p_ICD10 = NULL;
+    SET p_Sequence = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            ClaimId,
+            ICD10,
+            Sequence,
+            Active
+        INTO
+            p_ClaimId,
+            p_ICD10,
+            p_Sequence,
+            p_Active
+        FROM claim_diagnoses
+        WHERE Id = p_Id;
+
+        IF p_ClaimId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimDiagnosesListByClaim`(
+    IN p_ClaimId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_ClaimId IS NULL OR p_ClaimId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            ClaimId,
+            ICD10,
+            Sequence,
+            Active
+        FROM claim_diagnoses
+        WHERE ClaimId = p_ClaimId
+          AND Active = TRUE
+        ORDER BY Sequence;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimDiagnosesUpdate`(
+    IN  p_Id       BIGINT UNSIGNED,
+    IN  p_ICD10    VARCHAR(10),
+    IN  p_Sequence INT UNSIGNED,
+    OUT p_Success  BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ICD10 IS NULL OR p_ICD10 = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Sequence IS NULL OR p_Sequence = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM claim_diagnoses
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE claim_diagnoses
+        SET
+            ICD10    = p_ICD10,
+            Sequence = p_Sequence
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimLineItemsCreate`(
+    IN  p_ClaimId          BIGINT UNSIGNED,
+    IN  p_BillingCodeId    BIGINT UNSIGNED,
+    IN  p_DiagnosisPointer VARCHAR(10),
+    IN  p_Quantity         INT UNSIGNED,
+    IN  p_UnitPrice        DECIMAL(10,2),
+    IN  p_LineTotal        DECIMAL(10,2),
+    OUT p_Id               BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_ClaimId IS NULL OR p_ClaimId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_BillingCodeId IS NULL OR p_BillingCodeId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Quantity IS NULL OR p_Quantity = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_UnitPrice IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_LineTotal IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO claim_line_items (
+            ClaimId,
+            BillingCodeId,
+            DiagnosisPointer,
+            Quantity,
+            UnitPrice,
+            LineTotal,
+            Active
+        )
+        VALUES (
+            p_ClaimId,
+            p_BillingCodeId,
+            p_DiagnosisPointer,
+            p_Quantity,
+            p_UnitPrice,
+            p_LineTotal,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimLineItemsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM claim_line_items
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Claim line item not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE claim_line_items
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Claim line item deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimLineItemsGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_ClaimId BIGINT UNSIGNED,
+    OUT p_BillingCodeId BIGINT UNSIGNED,
+    OUT p_DiagnosisPointer VARCHAR(10),
+    OUT p_Quantity INT UNSIGNED,
+    OUT p_UnitPrice DECIMAL(10,2),
+    OUT p_LineTotal DECIMAL(10,2),
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_ClaimId = NULL;
+    SET p_BillingCodeId = NULL;
+    SET p_DiagnosisPointer = NULL;
+    SET p_Quantity = NULL;
+    SET p_UnitPrice = NULL;
+    SET p_LineTotal = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            ClaimId,
+            BillingCodeId,
+            DiagnosisPointer,
+            Quantity,
+            UnitPrice,
+            LineTotal,
+            Active
+        INTO
+            p_ClaimId,
+            p_BillingCodeId,
+            p_DiagnosisPointer,
+            p_Quantity,
+            p_UnitPrice,
+            p_LineTotal,
+            p_Active
+        FROM claim_line_items
+        WHERE Id = p_Id;
+
+        IF p_ClaimId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimLineItemsListByClaim`(
+    IN p_ClaimId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_ClaimId IS NULL OR p_ClaimId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            ClaimId,
+            BillingCodeId,
+            DiagnosisPointer,
+            Quantity,
+            UnitPrice,
+            LineTotal,
+            Active
+        FROM claim_line_items
+        WHERE ClaimId = p_ClaimId
+          AND Active = TRUE
+        ORDER BY Id;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimLineItemsUpdate`(
+    IN  p_Id               BIGINT UNSIGNED,
+    IN  p_BillingCodeId    BIGINT UNSIGNED,
+    IN  p_DiagnosisPointer VARCHAR(10),
+    IN  p_Quantity         INT UNSIGNED,
+    IN  p_UnitPrice        DECIMAL(10,2),
+    IN  p_LineTotal        DECIMAL(10,2),
+    OUT p_Success          BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_BillingCodeId IS NULL OR p_BillingCodeId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Quantity IS NULL OR p_Quantity = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_UnitPrice IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_LineTotal IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM claim_line_items
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE claim_line_items
+        SET
+            BillingCodeId    = p_BillingCodeId,
+            DiagnosisPointer = p_DiagnosisPointer,
+            Quantity         = p_Quantity,
+            UnitPrice        = p_UnitPrice,
+            LineTotal        = p_LineTotal
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `claims` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `VisitId` bigint(20) unsigned NOT NULL,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `PrimaryInsuranceId` bigint(20) unsigned DEFAULT NULL,
+  `SecondaryInsuranceId` bigint(20) unsigned DEFAULT NULL,
+  `ClaimDate` date NOT NULL,
+  `Status` enum('Open','Submitted','Rejected','Paid','Denied','Closed') NOT NULL DEFAULT 'Open',
+  `TotalCharge` decimal(10,2) DEFAULT 0.00,
+  `TotalPaid` decimal(10,2) DEFAULT 0.00,
+  `TotalAdjusted` decimal(10,2) DEFAULT 0.00,
+  `PatientResponsibility` decimal(10,2) DEFAULT 0.00,
+  `Notes` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Claims_VisitId` (`VisitId`),
+  KEY `IX_Claims_PatientId` (`PatientId`),
+  CONSTRAINT `FK_Claims_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Claims_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimsCreate`(
+    IN  p_VisitId               BIGINT UNSIGNED,
+    IN  p_PatientId             BIGINT UNSIGNED,
+    IN  p_PrimaryInsuranceId    BIGINT UNSIGNED,
+    IN  p_SecondaryInsuranceId  BIGINT UNSIGNED,
+    IN  p_ClaimDate             DATE,
+    IN  p_Status                ENUM('Open','Submitted','Rejected','Paid','Denied','Closed'),
+    IN  p_TotalCharge           DECIMAL(10,2),
+    IN  p_TotalPaid             DECIMAL(10,2),
+    IN  p_TotalAdjusted         DECIMAL(10,2),
+    IN  p_PatientResponsibility DECIMAL(10,2),
+    IN  p_Notes                 TEXT,
+    OUT p_Id                    BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_VisitId IS NULL OR p_VisitId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ClaimDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Status IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO claims (
+            VisitId,
+            PatientId,
+            PrimaryInsuranceId,
+            SecondaryInsuranceId,
+            ClaimDate,
+            Status,
+            TotalCharge,
+            TotalPaid,
+            TotalAdjusted,
+            PatientResponsibility,
+            Notes,
+            Active
+        )
+        VALUES (
+            p_VisitId,
+            p_PatientId,
+            p_PrimaryInsuranceId,
+            p_SecondaryInsuranceId,
+            p_ClaimDate,
+            p_Status,
+            p_TotalCharge,
+            p_TotalPaid,
+            p_TotalAdjusted,
+            p_PatientResponsibility,
+            p_Notes,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM claims
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Claim not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE claims
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Claim deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimsGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_VisitId BIGINT UNSIGNED,
+    OUT p_PatientId BIGINT UNSIGNED,
+    OUT p_PrimaryInsuranceId BIGINT UNSIGNED,
+    OUT p_SecondaryInsuranceId BIGINT UNSIGNED,
+    OUT p_ClaimDate DATE,
+    OUT p_Status ENUM('Open','Submitted','Rejected','Paid','Denied','Closed'),
+    OUT p_TotalCharge DECIMAL(10,2),
+    OUT p_TotalPaid DECIMAL(10,2),
+    OUT p_TotalAdjusted DECIMAL(10,2),
+    OUT p_PatientResponsibility DECIMAL(10,2),
+    OUT p_Notes TEXT,
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_VisitId = NULL;
+    SET p_PatientId = NULL;
+    SET p_PrimaryInsuranceId = NULL;
+    SET p_SecondaryInsuranceId = NULL;
+    SET p_ClaimDate = NULL;
+    SET p_Status = NULL;
+    SET p_TotalCharge = NULL;
+    SET p_TotalPaid = NULL;
+    SET p_TotalAdjusted = NULL;
+    SET p_PatientResponsibility = NULL;
+    SET p_Notes = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            VisitId,
+            PatientId,
+            PrimaryInsuranceId,
+            SecondaryInsuranceId,
+            ClaimDate,
+            Status,
+            TotalCharge,
+            TotalPaid,
+            TotalAdjusted,
+            PatientResponsibility,
+            Notes,
+            Active
+        INTO
+            p_VisitId,
+            p_PatientId,
+            p_PrimaryInsuranceId,
+            p_SecondaryInsuranceId,
+            p_ClaimDate,
+            p_Status,
+            p_TotalCharge,
+            p_TotalPaid,
+            p_TotalAdjusted,
+            p_PatientResponsibility,
+            p_Notes,
+            p_Active
+        FROM claims
+        WHERE Id = p_Id;
+
+        IF p_VisitId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimsListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            VisitId,
+            PatientId,
+            PrimaryInsuranceId,
+            SecondaryInsuranceId,
+            ClaimDate,
+            Status,
+            TotalCharge,
+            TotalPaid,
+            TotalAdjusted,
+            PatientResponsibility,
+            Notes,
+            Active
+        FROM claims
+        WHERE PatientId = p_PatientId
+          AND Active = TRUE
+        ORDER BY ClaimDate DESC;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ClaimsUpdate`(
+    IN  p_Id                    BIGINT UNSIGNED,
+    IN  p_PrimaryInsuranceId    BIGINT UNSIGNED,
+    IN  p_SecondaryInsuranceId  BIGINT UNSIGNED,
+    IN  p_ClaimDate             DATE,
+    IN  p_Status                ENUM('Open','Submitted','Rejected','Paid','Denied','Closed'),
+    IN  p_TotalCharge           DECIMAL(10,2),
+    IN  p_TotalPaid             DECIMAL(10,2),
+    IN  p_TotalAdjusted         DECIMAL(10,2),
+    IN  p_PatientResponsibility DECIMAL(10,2),
+    IN  p_Notes                 TEXT,
+    OUT p_Success               BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ClaimDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Status IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM claims
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE claims
+        SET
+            PrimaryInsuranceId    = p_PrimaryInsuranceId,
+            SecondaryInsuranceId  = p_SecondaryInsuranceId,
+            ClaimDate             = p_ClaimDate,
+            Status                = p_Status,
+            TotalCharge           = p_TotalCharge,
+            TotalPaid             = p_TotalPaid,
+            TotalAdjusted         = p_TotalAdjusted,
+            PatientResponsibility = p_PatientResponsibility,
+            Notes                 = p_Notes
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `code_sets` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Version` varchar(50) NOT NULL,
+  `ReleaseDate` date NOT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CodeSetsCreate`(
+    IN  p_Name        VARCHAR(100),
+    IN  p_Version     VARCHAR(50),
+    IN  p_ReleaseDate DATE,
+    IN  p_Notes       TEXT,
+    OUT p_Id          BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Version IS NULL OR p_Version = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ReleaseDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO code_sets (
+            Name,
+            Version,
+            ReleaseDate,
+            Active,
+            Notes
+        )
+        VALUES (
+            p_Name,
+            p_Version,
+            p_ReleaseDate,
+            TRUE,
+            p_Notes
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CodeSetsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM code_sets
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Code set not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE code_sets
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Code set deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CodeSetsGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Name VARCHAR(100),
+    OUT p_Version VARCHAR(50),
+    OUT p_ReleaseDate DATE,
+    OUT p_Active BOOLEAN,
+    OUT p_Notes TEXT,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Name = NULL;
+    SET p_Version = NULL;
+    SET p_ReleaseDate = NULL;
+    SET p_Active = NULL;
+    SET p_Notes = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Name,
+            Version,
+            ReleaseDate,
+            Active,
+            Notes
+        INTO
+            p_Name,
+            p_Version,
+            p_ReleaseDate,
+            p_Active,
+            p_Notes
+        FROM code_sets
+        WHERE Id = p_Id;
+
+        IF p_Name IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CodeSetsList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Version,
+        ReleaseDate,
+        Active,
+        Notes,
+        Created,
+        Updated
+    FROM code_sets
+    WHERE Active = TRUE
+    ORDER BY ReleaseDate DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CodeSetsUpdate`(
+    IN  p_Id          BIGINT UNSIGNED,
+    IN  p_Name        VARCHAR(100),
+    IN  p_Version     VARCHAR(50),
+    IN  p_ReleaseDate DATE,
+    IN  p_Notes       TEXT,
+    OUT p_Success     BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Version IS NULL OR p_Version = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ReleaseDate IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM code_sets
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE code_sets
+        SET
+            Name        = p_Name,
+            Version     = p_Version,
+            ReleaseDate = p_ReleaseDate,
+            Notes       = p_Notes
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` FUNCTION `ComputeAddressHash`(p_Maildrop VARCHAR(50),
+    p_Street   VARCHAR(50),
+    p_Suite    VARCHAR(50),
+    p_ZipCode  INT(5) UNSIGNED ZEROFILL
+) RETURNS char(64) CHARSET utf8mb4
+    DETERMINISTIC
+BEGIN
+    DECLARE v_input TEXT;
+
+    SET v_input = CONCAT_WS('|',
+        UPPER(TRIM(COALESCE(p_Maildrop, ''))),
+        UPPER(TRIM(COALESCE(p_Street, ''))),
+        UPPER(TRIM(COALESCE(p_Suite, ''))),
+        LPAD(p_ZipCode, 5, '0')
+    );
+
+    RETURN SHA2(v_input, 256);
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `condition_types` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ICD10` varchar(10) NOT NULL,
+  `Name` varchar(255) NOT NULL,
+  `Description` text DEFAULT NULL,
+  `Chronic` tinyint(1) NOT NULL DEFAULT 1,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ConditionTypesCreate`(
+    IN  p_ICD10       VARCHAR(10),
+    IN  p_Name        VARCHAR(255),
+    IN  p_Description TEXT,
+    IN  p_Chronic     BOOLEAN,
+    OUT p_Id          BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_ICD10 IS NULL OR p_ICD10 = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Chronic IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO condition_types (
+            ICD10,
+            Name,
+            Description,
+            Chronic,
+            Active
+        )
+        VALUES (
+            p_ICD10,
+            p_Name,
+            p_Description,
+            p_Chronic,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ConditionTypesDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM condition_types
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Condition type not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE condition_types
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Condition type deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ConditionTypesGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_ICD10 VARCHAR(10),
+    OUT p_Name VARCHAR(255),
+    OUT p_Description TEXT,
+    OUT p_Chronic BOOLEAN,
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_ICD10 = NULL;
+    SET p_Name = NULL;
+    SET p_Description = NULL;
+    SET p_Chronic = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            ICD10,
+            Name,
+            Description,
+            Chronic,
+            Active
+        INTO
+            p_ICD10,
+            p_Name,
+            p_Description,
+            p_Chronic,
+            p_Active
+        FROM condition_types
+        WHERE Id = p_Id;
+
+        IF p_ICD10 IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ConditionTypesList`()
+BEGIN
+    SELECT
+        Id,
+        ICD10,
+        Name,
+        Description,
+        Chronic,
+        Active
+    FROM condition_types
+    WHERE Active = TRUE
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ConditionTypesListAll`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Description,
+        Active
+    FROM condition_types
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ConditionTypesUpdate`(
+    IN  p_Id          BIGINT UNSIGNED,
+    IN  p_ICD10       VARCHAR(10),
+    IN  p_Name        VARCHAR(255),
+    IN  p_Description TEXT,
+    IN  p_Chronic     BOOLEAN,
+    OUT p_Success     BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_ICD10 IS NULL OR p_ICD10 = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Chronic IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM condition_types
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE condition_types
+        SET
+            ICD10       = p_ICD10,
+            Name        = p_Name,
+            Description = p_Description,
+            Chronic     = p_Chronic
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `daily_sleep_apnea` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `RecordedAt` datetime NOT NULL,
+  `UsageHours` decimal(4,2) DEFAULT NULL,
+  `AHI` decimal(4,2) DEFAULT NULL,
+  `LeakRate` decimal(6,2) DEFAULT NULL,
+  `Pressure` decimal(4,2) DEFAULT NULL,
+  `IsCompliant` tinyint(1) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_DailySleepApnea_PatientId` (`PatientId`),
+  CONSTRAINT `FK_DailySleepApnea_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `daily_vitals` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `RecordedAt` datetime NOT NULL,
+  `Systolic` int(10) unsigned DEFAULT NULL,
+  `Diastolic` int(10) unsigned DEFAULT NULL,
+  `Pulse` int(10) unsigned DEFAULT NULL,
+  `Oxygen` int(10) unsigned DEFAULT NULL,
+  `Weight` decimal(5,2) DEFAULT NULL,
+  `Temperature` decimal(4,1) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_DailyVitals_PatientId` (`PatientId`),
+  CONSTRAINT `FK_DailyVitals_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailySleepApneaBulkImport`(
+    IN p_PatientId   BIGINT UNSIGNED,
+    IN p_RecordedAt  DATETIME,
+    IN p_UsageHHMM   VARCHAR(10),
+    IN p_AHI         DECIMAL(4,2),
+    IN p_LeakRate    DECIMAL(6,2),
+    IN p_Pressure    DECIMAL(4,2),
+    IN p_Notes       TEXT,
+    OUT p_Id         BIGINT,
+    OUT p_Success    BOOLEAN,
+    OUT p_Message    VARCHAR(255)
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_usage DECIMAL(4,2);
+
+    SET p_Id = 0;
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid PatientId';
+    END IF;
+
+    IF p_RecordedAt IS NULL THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'RecordedAt is required';
+    END IF;
+
+    IF p_UsageHHMM IS NULL OR p_UsageHHMM = '' THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Usage time (HH:MM) is required';
+    END IF;
+
+    
+    IF v_is_valid THEN
+        SET v_usage = HHMMToDecimal(p_UsageHHMM);
+
+        IF v_usage IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Invalid HH:MM format';
+        END IF;
+    END IF;
+
+    
+    IF v_is_valid THEN
+        INSERT INTO daily_sleep_apnea (
+            PatientId,
+            RecordedAt,
+            UsageHours,
+            AHI,
+            LeakRate,
+            Pressure,
+            IsCompliant,
+            Notes
+        )
+        VALUES (
+            p_PatientId,
+            p_RecordedAt,
+            v_usage,
+            p_AHI,
+            p_LeakRate,
+            p_Pressure,
+            CASE WHEN v_usage >= 4.00 THEN 1 ELSE 0 END,
+            p_Notes
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+        SET p_Success = TRUE;
+        SET p_Message = 'Sleep apnea log imported';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailySleepApneaCreate`(
+    IN  p_PatientId   BIGINT UNSIGNED,
+    IN  p_RecordedAt  DATETIME,
+    IN  p_UsageHours  DECIMAL(4,2),
+    IN  p_AHI         DECIMAL(4,2),
+    IN  p_LeakRate    DECIMAL(6,2),
+    IN  p_Pressure    DECIMAL(4,2),
+    IN  p_IsCompliant TINYINT(1),
+    IN  p_Notes       TEXT,
+    OUT p_Id          BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_RecordedAt IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO daily_sleep_apnea (
+            PatientId,
+            RecordedAt,
+            UsageHours,
+            AHI,
+            LeakRate,
+            Pressure,
+            IsCompliant,
+            Notes
+        )
+        VALUES (
+            p_PatientId,
+            p_RecordedAt,
+            p_UsageHours,
+            p_AHI,
+            p_LeakRate,
+            p_Pressure,
+            p_IsCompliant,
+            p_Notes
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailySleepApneaDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM daily_sleep_apnea
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Record not found';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        DELETE FROM daily_sleep_apnea
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Record deleted';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailySleepApneaGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_PatientId BIGINT UNSIGNED,
+    OUT p_RecordedAt DATETIME,
+    OUT p_UsageHours DECIMAL(4,2),
+    OUT p_AHI DECIMAL(4,2),
+    OUT p_LeakRate DECIMAL(6,2),
+    OUT p_Pressure DECIMAL(4,2),
+    OUT p_IsCompliant TINYINT(1),
+    OUT p_Notes TEXT,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_PatientId = NULL;
+    SET p_RecordedAt = NULL;
+    SET p_UsageHours = NULL;
+    SET p_AHI = NULL;
+    SET p_LeakRate = NULL;
+    SET p_Pressure = NULL;
+    SET p_IsCompliant = NULL;
+    SET p_Notes = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            PatientId,
+            RecordedAt,
+            UsageHours,
+            AHI,
+            LeakRate,
+            Pressure,
+            IsCompliant,
+            Notes
+        INTO
+            p_PatientId,
+            p_RecordedAt,
+            p_UsageHours,
+            p_AHI,
+            p_LeakRate,
+            p_Pressure,
+            p_IsCompliant,
+            p_Notes
+        FROM daily_sleep_apnea
+        WHERE Id = p_Id;
+
+        IF p_PatientId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailySleepApneaListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            PatientId,
+            RecordedAt,
+            UsageHours,
+            AHI,
+            LeakRate,
+            Pressure,
+            IsCompliant,
+            Notes
+        FROM daily_sleep_apnea
+        WHERE PatientId = p_PatientId
+        ORDER BY RecordedAt DESC;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailySleepApneaUpdate`(
+    IN  p_Id          BIGINT UNSIGNED,
+    IN  p_RecordedAt  DATETIME,
+    IN  p_UsageHours  DECIMAL(4,2),
+    IN  p_AHI         DECIMAL(4,2),
+    IN  p_LeakRate    DECIMAL(6,2),
+    IN  p_Pressure    DECIMAL(4,2),
+    IN  p_IsCompliant TINYINT(1),
+    IN  p_Notes       TEXT,
+    OUT p_Success     BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_RecordedAt IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM daily_sleep_apnea
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE daily_sleep_apnea
+        SET
+            RecordedAt  = p_RecordedAt,
+            UsageHours  = p_UsageHours,
+            AHI         = p_AHI,
+            LeakRate    = p_LeakRate,
+            Pressure    = p_Pressure,
+            IsCompliant = p_IsCompliant,
+            Notes       = p_Notes
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailyVitalsCreate`(
+    IN  p_PatientId   BIGINT UNSIGNED,
+    IN  p_RecordedAt  DATETIME,
+    IN  p_Systolic    INT UNSIGNED,
+    IN  p_Diastolic   INT UNSIGNED,
+    IN  p_Pulse       INT UNSIGNED,
+    IN  p_Oxygen      INT UNSIGNED,
+    IN  p_Weight      DECIMAL(5,2),
+    IN  p_Temperature DECIMAL(4,1),
+    IN  p_Notes       TEXT,
+    OUT p_Id          BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_RecordedAt IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO daily_vitals (
+            PatientId,
+            RecordedAt,
+            Systolic,
+            Diastolic,
+            Pulse,
+            Oxygen,
+            Weight,
+            Temperature,
+            Notes
+        )
+        VALUES (
+            p_PatientId,
+            p_RecordedAt,
+            p_Systolic,
+            p_Diastolic,
+            p_Pulse,
+            p_Oxygen,
+            p_Weight,
+            p_Temperature,
+            p_Notes
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailyVitalsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM daily_vitals
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Record not found';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        DELETE FROM daily_vitals
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Record deleted';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailyVitalsGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_PatientId BIGINT UNSIGNED,
+    OUT p_RecordedAt DATETIME,
+    OUT p_Systolic INT UNSIGNED,
+    OUT p_Diastolic INT UNSIGNED,
+    OUT p_Pulse INT UNSIGNED,
+    OUT p_Oxygen INT UNSIGNED,
+    OUT p_Weight DECIMAL(5,2),
+    OUT p_Temperature DECIMAL(4,1),
+    OUT p_Notes TEXT,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_PatientId = NULL;
+    SET p_RecordedAt = NULL;
+    SET p_Systolic = NULL;
+    SET p_Diastolic = NULL;
+    SET p_Pulse = NULL;
+    SET p_Oxygen = NULL;
+    SET p_Weight = NULL;
+    SET p_Temperature = NULL;
+    SET p_Notes = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            PatientId,
+            RecordedAt,
+            Systolic,
+            Diastolic,
+            Pulse,
+            Oxygen,
+            Weight,
+            Temperature,
+            Notes
+        INTO
+            p_PatientId,
+            p_RecordedAt,
+            p_Systolic,
+            p_Diastolic,
+            p_Pulse,
+            p_Oxygen,
+            p_Weight,
+            p_Temperature,
+            p_Notes
+        FROM daily_vitals
+        WHERE Id = p_Id;
+
+        IF p_PatientId IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DailyVitalsListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Id,
+            PatientId,
+            RecordedAt,
+            Systolic,
+            Diastolic,
+            Pulse,
+            Oxygen,
+            Weight,
+            Temperature,
+            Notes
+        FROM daily_vitals
+        WHERE PatientId = p_PatientId
+        ORDER BY RecordedAt DESC;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` FUNCTION `DecimalToHHMM`(p_Hours DECIMAL(4,2)) RETURNS varchar(10) CHARSET utf8mb4
+    DETERMINISTIC
+BEGIN
+    DECLARE v_hours INT DEFAULT 0;
+    DECLARE v_minutes INT DEFAULT 0;
+    DECLARE v_result VARCHAR(10) DEFAULT NULL;
+
+    IF p_Hours IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    
+    SET v_hours = FLOOR(p_Hours);
+
+    
+    SET v_minutes = ROUND((p_Hours - v_hours) * 60);
+
+    
+    IF v_minutes = 60 THEN
+        SET v_minutes = 0;
+        SET v_hours = v_hours + 1;
+    END IF;
+
+    
+    SET v_result = LPAD(v_hours, 2, '0') + ':' + LPAD(v_minutes, 2, '0');
+
+    RETURN v_result;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `diagnosis_codes` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Code` varchar(20) NOT NULL,
+  `Description` varchar(255) NOT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DiagnosisCodesCreate`(
+    IN  p_Code        VARCHAR(20),
+    IN  p_Description VARCHAR(255),
+    OUT p_Id          BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_Code IS NULL OR p_Code = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Description IS NULL OR p_Description = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO diagnosis_codes (
+            Code,
+            Description,
+            Active
+        )
+        VALUES (
+            p_Code,
+            p_Description,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DiagnosisCodesDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM diagnosis_codes
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Diagnosis code not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE diagnosis_codes
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Diagnosis code deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DiagnosisCodesGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Code VARCHAR(20),
+    OUT p_Description VARCHAR(255),
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Code = NULL;
+    SET p_Description = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Code,
+            Description,
+            Active
+        INTO
+            p_Code,
+            p_Description,
+            p_Active
+        FROM diagnosis_codes
+        WHERE Id = p_Id;
+
+        IF p_Code IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DiagnosisCodesList`()
+BEGIN
+    SELECT
+        Id,
+        Code,
+        Description,
+        Active,
+        Created,
+        Updated
+    FROM diagnosis_codes
+    WHERE Active = TRUE
+    ORDER BY Code;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DiagnosisCodesListAll`()
+BEGIN
+    SELECT
+        Id,
+        Code,
+        Description,
+        Active
+    FROM diagnosis_codes
+    ORDER BY Active DESC, Code;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DiagnosisCodesUpdate`(
+    IN  p_Id          BIGINT UNSIGNED,
+    IN  p_Code        VARCHAR(20),
+    IN  p_Description VARCHAR(255),
+    OUT p_Success     BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Code IS NULL OR p_Code = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Description IS NULL OR p_Description = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM diagnosis_codes
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE diagnosis_codes
+        SET
+            Code        = p_Code,
+            Description = p_Description
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `doctor_facilities` (
+  `DoctorId` bigint(20) unsigned NOT NULL,
+  `FacilityId` bigint(20) unsigned NOT NULL,
+  `IsPrimary` tinyint(1) NOT NULL DEFAULT 0,
+  `Outreach` tinyint(1) NOT NULL DEFAULT 0,
+  `Notes` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`DoctorId`,`FacilityId`),
+  KEY `FK_DoctorFacilities_Facilities` (`FacilityId`),
+  CONSTRAINT `FK_DoctorFacilities_Doctors` FOREIGN KEY (`DoctorId`) REFERENCES `doctors` (`Id`),
+  CONSTRAINT `FK_DoctorFacilities_Facilities` FOREIGN KEY (`FacilityId`) REFERENCES `facilities` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorFacilitiesCreate`(
+    IN  p_DoctorId   BIGINT UNSIGNED,
+    IN  p_FacilityId BIGINT UNSIGNED,
+    IN  p_IsPrimary  TINYINT(1),
+    IN  p_Outreach   TINYINT(1),
+    IN  p_Notes      VARCHAR(255),
+    OUT p_Success    BOOLEAN,
+    OUT p_Message    VARCHAR(255)
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    
+    IF p_DoctorId IS NULL OR p_DoctorId = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid DoctorId';
+    END IF;
+
+    IF p_FacilityId IS NULL OR p_FacilityId = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid FacilityId';
+    END IF;
+
+    
+    IF v_is_valid THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM doctor_facilities
+        WHERE DoctorId = p_DoctorId
+          AND FacilityId = p_FacilityId;
+
+        IF v_exists > 0 THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Relationship already exists';
+        END IF;
+    END IF;
+
+    
+    IF v_is_valid THEN
+        INSERT INTO doctor_facilities (
+            DoctorId,
+            FacilityId,
+            IsPrimary,
+            Outreach,
+            Notes
+        )
+        VALUES (
+            p_DoctorId,
+            p_FacilityId,
+            p_IsPrimary,
+            p_Outreach,
+            p_Notes
+        );
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Relationship created';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorFacilitiesDelete`(
+    IN  p_DoctorId   BIGINT UNSIGNED,
+    IN  p_FacilityId BIGINT UNSIGNED,
+    OUT p_Success    BOOLEAN,
+    OUT p_Message    VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_DoctorId IS NULL OR p_DoctorId = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid DoctorId';
+    END IF;
+
+    IF p_FacilityId IS NULL OR p_FacilityId = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid FacilityId';
+    END IF;
+
+    
+    IF v_is_valid THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM doctor_facilities
+        WHERE DoctorId = p_DoctorId
+          AND FacilityId = p_FacilityId;
+
+        IF v_exists = 0 THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Relationship not found';
+        END IF;
+    END IF;
+
+    
+    IF v_is_valid THEN
+        DELETE FROM doctor_facilities
+        WHERE DoctorId = p_DoctorId
+          AND FacilityId = p_FacilityId;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Relationship deleted';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorFacilitiesListByDoctor`(
+    IN p_DoctorId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_DoctorId IS NULL OR p_DoctorId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            DoctorId,
+            FacilityId,
+            IsPrimary,
+            Outreach,
+            Notes
+        FROM doctor_facilities
+        WHERE DoctorId = p_DoctorId
+        ORDER BY IsPrimary DESC, FacilityId;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorFacilitiesListByFacility`(
+    IN p_FacilityId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    IF p_FacilityId IS NULL OR p_FacilityId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            DoctorId,
+            FacilityId,
+            IsPrimary,
+            Outreach,
+            Notes
+        FROM doctor_facilities
+        WHERE FacilityId = p_FacilityId
+        ORDER BY DoctorId;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorFacilitiesUpdate`(
+    IN  p_DoctorId   BIGINT UNSIGNED,
+    IN  p_FacilityId BIGINT UNSIGNED,
+    IN  p_IsPrimary  TINYINT(1),
+    IN  p_Outreach   TINYINT(1),
+    IN  p_Notes      VARCHAR(255),
+    OUT p_Success    BOOLEAN,
+    OUT p_Message    VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_DoctorId IS NULL OR p_DoctorId = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid DoctorId';
+    END IF;
+
+    IF p_FacilityId IS NULL OR p_FacilityId = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid FacilityId';
+    END IF;
+
+    
+    IF v_is_valid THEN
+        SELECT COUNT(*) INTO v_exists
+        FROM doctor_facilities
+        WHERE DoctorId = p_DoctorId
+          AND FacilityId = p_FacilityId;
+
+        IF v_exists = 0 THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Relationship not found';
+        END IF;
+    END IF;
+
+    
+    IF v_is_valid THEN
+        UPDATE doctor_facilities
+        SET
+            IsPrimary = p_IsPrimary,
+            Outreach  = p_Outreach,
+            Notes     = p_Notes
+        WHERE DoctorId = p_DoctorId
+          AND FacilityId = p_FacilityId;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Relationship updated';
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `doctors` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `FirstName` varchar(50) NOT NULL,
+  `LastName` varchar(50) NOT NULL,
+  `MiddleName` varchar(50) DEFAULT NULL,
+  `Credential` enum('MD','DO','PA','NP','RN','LPN','DC','DDS','DMD','OD','PharmD') NOT NULL,
+  `Specialty` varchar(100) DEFAULT NULL,
+  `AddressId` bigint(20) unsigned DEFAULT NULL,
+  `Phone` varchar(20) DEFAULT NULL,
+  `Fax` varchar(20) DEFAULT NULL,
+  `NPI` varchar(20) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `FK_Doctors_Addresses` (`AddressId`),
+  CONSTRAINT `FK_Doctors_Addresses` FOREIGN KEY (`AddressId`) REFERENCES `medical26`.`addresses` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorsCreate`(
+    IN  p_FirstName  VARCHAR(50),
+    IN  p_LastName   VARCHAR(50),
+    IN  p_MiddleName VARCHAR(50),
+    IN  p_Credential VARCHAR(20),
+    IN  p_Specialty  VARCHAR(100),
+    IN  p_AddressId  BIGINT UNSIGNED,
+    IN  p_Phone      VARCHAR(20),
+    IN  p_Fax        VARCHAR(20),
+    IN  p_NPI        VARCHAR(20),
+    OUT p_Id         BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_FirstName IS NULL OR p_FirstName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_LastName IS NULL OR p_LastName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Credential IS NULL OR p_Credential = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO doctors (
+            FirstName,
+            LastName,
+            MiddleName,
+            Credential,
+            Specialty,
+            AddressId,
+            Phone,
+            Fax,
+            NPI,
+            Active
+        )
+        VALUES (
+            p_FirstName,
+            p_LastName,
+            p_MiddleName,
+            p_Credential,
+            p_Specialty,
+            p_AddressId,
+            p_Phone,
+            p_Fax,
+            p_NPI,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM doctors
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Doctor not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE doctors
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Doctor deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorsGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_FirstName VARCHAR(50),
+    OUT p_LastName VARCHAR(50),
+    OUT p_MiddleName VARCHAR(50),
+    OUT p_Credential VARCHAR(20),
+    OUT p_Specialty VARCHAR(100),
+    OUT p_AddressId BIGINT UNSIGNED,
+    OUT p_Phone VARCHAR(20),
+    OUT p_Fax VARCHAR(20),
+    OUT p_NPI VARCHAR(20),
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_FirstName = NULL;
+    SET p_LastName = NULL;
+    SET p_MiddleName = NULL;
+    SET p_Credential = NULL;
+    SET p_Specialty = NULL;
+    SET p_AddressId = NULL;
+    SET p_Phone = NULL;
+    SET p_Fax = NULL;
+    SET p_NPI = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            FirstName,
+            LastName,
+            MiddleName,
+            Credential,
+            Specialty,
+            AddressId,
+            Phone,
+            Fax,
+            NPI,
+            Active
+        INTO
+            p_FirstName,
+            p_LastName,
+            p_MiddleName,
+            p_Credential,
+            p_Specialty,
+            p_AddressId,
+            p_Phone,
+            p_Fax,
+            p_NPI,
+            p_Active
+        FROM doctors
+        WHERE Id = p_Id;
+
+        IF p_FirstName IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorsList`()
+BEGIN
+    SELECT
+        Id,
+        FirstName,
+        LastName,
+        MiddleName,
+        Credential,
+        Specialty,
+        AddressId,
+        Phone,
+        Fax,
+        NPI,
+        Active,
+        Created,
+        Updated
+    FROM doctors
+    WHERE Active = TRUE
+    ORDER BY LastName, FirstName;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorsListAll`()
+BEGIN
+    SELECT
+        Id,
+        FirstName,
+        LastName,
+        MiddleName,
+        Credential,
+        Specialty,
+        AddressId,
+        Phone,
+        Fax,
+        NPI,
+        Active,
+        Created,
+        Updated
+    FROM doctors
+    ORDER BY Active DESC, LastName, FirstName;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DoctorsUpdate`(
+    IN  p_Id         BIGINT UNSIGNED,
+    IN  p_FirstName  VARCHAR(50),
+    IN  p_LastName   VARCHAR(50),
+    IN  p_MiddleName VARCHAR(50),
+    IN  p_Credential VARCHAR(20),
+    IN  p_Specialty  VARCHAR(100),
+    IN  p_AddressId  BIGINT UNSIGNED,
+    IN  p_Phone      VARCHAR(20),
+    IN  p_Fax        VARCHAR(20),
+    IN  p_NPI        VARCHAR(20),
+    OUT p_Success    BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_FirstName IS NULL OR p_FirstName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_LastName IS NULL OR p_LastName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Credential IS NULL OR p_Credential = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM doctors
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE doctors
+        SET
+            FirstName  = p_FirstName,
+            LastName   = p_LastName,
+            MiddleName = p_MiddleName,
+            Credential = p_Credential,
+            Specialty  = p_Specialty,
+            AddressId  = p_AddressId,
+            Phone      = p_Phone,
+            Fax        = p_Fax,
+            NPI        = p_NPI
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `document_categories` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Description` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `document_links` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `DocumentId` bigint(20) unsigned NOT NULL,
+  `PatientId` bigint(20) unsigned DEFAULT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `ImagingStudyId` bigint(20) unsigned DEFAULT NULL,
+  `LabResultId` bigint(20) unsigned DEFAULT NULL,
+  `ClaimId` bigint(20) unsigned DEFAULT NULL,
+  `LinkedAt` datetime NOT NULL DEFAULT current_timestamp(),
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_DocumentLinks_DocumentId` (`DocumentId`),
+  CONSTRAINT `FK_DocumentLinks_Documents` FOREIGN KEY (`DocumentId`) REFERENCES `documents` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentCategoriesCreate`(
+    IN  p_Name        VARCHAR(100),
+    IN  p_Description TEXT,
+    OUT p_Id          BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO document_categories (
+            Name,
+            Description,
+            Active
+        )
+        VALUES (
+            p_Name,
+            p_Description,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentCategoriesDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM document_categories
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Category not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE document_categories
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Category deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentCategoriesGetById`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Name VARCHAR(100),
+    OUT p_Description TEXT,
+    OUT p_Active BOOLEAN,
+    OUT p_Found BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Name = NULL;
+    SET p_Description = NULL;
+    SET p_Active = NULL;
+    SET p_Found = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT
+            Name,
+            Description,
+            Active
+        INTO
+            p_Name,
+            p_Description,
+            p_Active
+        FROM document_categories
+        WHERE Id = p_Id;
+
+        IF p_Name IS NOT NULL THEN
+            SET p_Found = TRUE;
+        END IF;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentCategoriesList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Description,
+        Active
+    FROM document_categories
+    WHERE Active = TRUE
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentCategoriesListAll`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Description,
+        Active
+    FROM document_categories
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentCategoriesUpdate`(
+    IN  p_Id          BIGINT UNSIGNED,
+    IN  p_Name        VARCHAR(100),
+    IN  p_Description TEXT,
+    OUT p_Success     BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM document_categories
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE document_categories
+        SET
+            Name        = p_Name,
+            Description = p_Description
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentLinksCreate`(
+    IN  p_DocumentId     BIGINT UNSIGNED,
+    IN  p_PatientId      BIGINT UNSIGNED,
+    IN  p_VisitId        BIGINT UNSIGNED,
+    IN  p_ImagingStudyId BIGINT UNSIGNED,
+    IN  p_LabResultId    BIGINT UNSIGNED,
+    IN  p_ClaimId        BIGINT UNSIGNED,
+    IN  p_Notes          TEXT,
+    OUT p_Id             BIGINT,
+    OUT p_Success        BOOLEAN,
+    OUT p_Message        VARCHAR(255)
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    
+    IF p_DocumentId IS NULL OR p_DocumentId = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'DocumentId is required';
+    END IF;
+
+    
+    IF v_is_valid THEN
+        IF (p_PatientId IS NULL OR p_PatientId = 0)
+           AND (p_VisitId IS NULL OR p_VisitId = 0)
+           AND (p_ImagingStudyId IS NULL OR p_ImagingStudyId = 0)
+           AND (p_LabResultId IS NULL OR p_LabResultId = 0)
+           AND (p_ClaimId IS NULL OR p_ClaimId = 0) THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'At least one target Id must be provided';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO document_links (
+            DocumentId,
+            PatientId,
+            VisitId,
+            ImagingStudyId,
+            LabResultId,
+            ClaimId,
+            Notes
+        )
+        VALUES (
+            p_DocumentId,
+            p_PatientId,
+            p_VisitId,
+            p_ImagingStudyId,
+            p_LabResultId,
+            p_ClaimId,
+            p_Notes
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+        SET p_Success = TRUE;
+        SET p_Message = 'Document link created';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentLinksDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM document_links
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Document link not found';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        DELETE FROM document_links
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Document link deleted';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentLinksGetById`(
+    IN  p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT
+        Id,
+        DocumentId,
+        PatientId,
+        VisitId,
+        ImagingStudyId,
+        LabResultId,
+        ClaimId,
+        LinkedAt,
+        Notes
+    FROM document_links
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentLinksListByDocument`(
+    IN p_DocumentId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_DocumentId IS NOT NULL AND p_DocumentId > 0 THEN
+        SELECT *
+        FROM document_links
+        WHERE DocumentId = p_DocumentId
+        ORDER BY LinkedAt DESC;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentLinksUpdate`(
+    IN  p_Id    BIGINT UNSIGNED,
+    IN  p_Notes TEXT,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM document_links
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Document link not found';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE document_links
+        SET Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Document link updated';
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `documents` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `CategoryId` bigint(20) unsigned DEFAULT NULL,
+  `FileName` varchar(255) NOT NULL,
+  `FileType` varchar(50) NOT NULL,
+  `FileSize` bigint(20) unsigned DEFAULT NULL,
+  `StoragePath` varchar(500) NOT NULL,
+  `UploadedBy` bigint(20) unsigned DEFAULT NULL,
+  `UploadedAt` datetime NOT NULL DEFAULT current_timestamp(),
+  `Description` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Documents_CategoryId` (`CategoryId`),
+  CONSTRAINT `FK_Documents_Categories` FOREIGN KEY (`CategoryId`) REFERENCES `document_categories` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentsCreate`(
+    IN  p_CategoryId  BIGINT UNSIGNED,
+    IN  p_FileName    VARCHAR(255),
+    IN  p_FileType    VARCHAR(50),
+    IN  p_FileSize    BIGINT UNSIGNED,
+    IN  p_StoragePath VARCHAR(500),
+    IN  p_UploadedBy  BIGINT UNSIGNED,
+    IN  p_Description TEXT,
+    OUT p_Id          BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_FileName IS NULL OR p_FileName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_FileType IS NULL OR p_FileType = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_StoragePath IS NULL OR p_StoragePath = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO documents (
+            CategoryId,
+            FileName,
+            FileType,
+            FileSize,
+            StoragePath,
+            UploadedBy,
+            Description
+        )
+        VALUES (
+            p_CategoryId,
+            p_FileName,
+            p_FileType,
+            p_FileSize,
+            p_StoragePath,
+            p_UploadedBy,
+            p_Description
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM documents
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Document not found';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        DELETE FROM documents
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Document deleted';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentsGetById`(
+    IN  p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT
+        Id,
+        CategoryId,
+        FileName,
+        FileType,
+        FileSize,
+        StoragePath,
+        UploadedBy,
+        UploadedAt,
+        Description
+    FROM documents
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentsList`()
+BEGIN
+    SELECT
+        Id,
+        CategoryId,
+        FileName,
+        FileType,
+        FileSize,
+        StoragePath,
+        UploadedBy,
+        UploadedAt,
+        Description
+    FROM documents
+    ORDER BY UploadedAt DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentsListByCategory`(
+    IN p_CategoryId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_CategoryId IS NOT NULL AND p_CategoryId > 0 THEN
+        SELECT *
+        FROM documents
+        WHERE CategoryId = p_CategoryId
+        ORDER BY UploadedAt DESC;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `DocumentsUpdate`(
+    IN  p_Id          BIGINT UNSIGNED,
+    IN  p_CategoryId  BIGINT UNSIGNED,
+    IN  p_FileName    VARCHAR(255),
+    IN  p_FileType    VARCHAR(50),
+    IN  p_FileSize    BIGINT UNSIGNED,
+    IN  p_StoragePath VARCHAR(500),
+    IN  p_Description TEXT,
+    OUT p_Success     BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_FileName IS NULL OR p_FileName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_FileType IS NULL OR p_FileType = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_StoragePath IS NULL OR p_StoragePath = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM documents
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE documents
+        SET
+            CategoryId  = p_CategoryId,
+            FileName    = p_FileName,
+            FileType    = p_FileType,
+            FileSize    = p_FileSize,
+            StoragePath = p_StoragePath,
+            Description = p_Description
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `emergency_contacts` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `FirstName` varchar(100) NOT NULL,
+  `LastName` varchar(100) NOT NULL,
+  `Relationship` varchar(100) NOT NULL,
+  `Priority` int(10) unsigned NOT NULL DEFAULT 1,
+  `PhonePrimary` varchar(50) NOT NULL,
+  `PhoneSecondary` varchar(50) DEFAULT NULL,
+  `Email` varchar(255) DEFAULT NULL,
+  `AddressLine1` varchar(255) DEFAULT NULL,
+  `AddressLine2` varchar(255) DEFAULT NULL,
+  `City` varchar(100) DEFAULT NULL,
+  `State` varchar(50) DEFAULT NULL,
+  `PostalCode` varchar(20) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_EmergencyContacts_PatientId` (`PatientId`),
+  CONSTRAINT `FK_EmergencyContacts_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmergencyContactsCreate`(
+    IN  p_PatientId      BIGINT UNSIGNED,
+    IN  p_FirstName      VARCHAR(100),
+    IN  p_LastName       VARCHAR(100),
+    IN  p_Relationship   VARCHAR(100),
+    IN  p_Priority       INT UNSIGNED,
+    IN  p_PhonePrimary   VARCHAR(50),
+    IN  p_PhoneSecondary VARCHAR(50),
+    IN  p_Email          VARCHAR(255),
+    IN  p_AddressLine1   VARCHAR(255),
+    IN  p_AddressLine2   VARCHAR(255),
+    IN  p_City           VARCHAR(100),
+    IN  p_State          VARCHAR(50),
+    IN  p_PostalCode     VARCHAR(20),
+    IN  p_Notes          TEXT,
+    OUT p_Id             BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_FirstName IS NULL OR p_FirstName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_LastName IS NULL OR p_LastName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Relationship IS NULL OR p_Relationship = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_PhonePrimary IS NULL OR p_PhonePrimary = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO emergency_contacts (
+            PatientId,
+            FirstName,
+            LastName,
+            Relationship,
+            Priority,
+            PhonePrimary,
+            PhoneSecondary,
+            Email,
+            AddressLine1,
+            AddressLine2,
+            City,
+            State,
+            PostalCode,
+            Notes
+        )
+        VALUES (
+            p_PatientId,
+            p_FirstName,
+            p_LastName,
+            p_Relationship,
+            p_Priority,
+            p_PhonePrimary,
+            p_PhoneSecondary,
+            p_Email,
+            p_AddressLine1,
+            p_AddressLine2,
+            p_City,
+            p_State,
+            p_PostalCode,
+            p_Notes
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmergencyContactsDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM emergency_contacts
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Emergency contact not found';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        DELETE FROM emergency_contacts
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Emergency contact deleted';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmergencyContactsGetById`(
+    IN  p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT
+        Id,
+        PatientId,
+        FirstName,
+        LastName,
+        Relationship,
+        Priority,
+        PhonePrimary,
+        PhoneSecondary,
+        Email,
+        AddressLine1,
+        AddressLine2,
+        City,
+        State,
+        PostalCode,
+        Notes
+    FROM emergency_contacts
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmergencyContactsListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NOT NULL AND p_PatientId > 0 THEN
+        SELECT
+            Id,
+            PatientId,
+            FirstName,
+            LastName,
+            Relationship,
+            Priority,
+            PhonePrimary,
+            PhoneSecondary,
+            Email,
+            AddressLine1,
+            AddressLine2,
+            City,
+            State,
+            PostalCode,
+            Notes
+        FROM emergency_contacts
+        WHERE PatientId = p_PatientId
+        ORDER BY Priority ASC, LastName, FirstName;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmergencyContactsUpdate`(
+    IN  p_Id             BIGINT UNSIGNED,
+    IN  p_FirstName      VARCHAR(100),
+    IN  p_LastName       VARCHAR(100),
+    IN  p_Relationship   VARCHAR(100),
+    IN  p_Priority       INT UNSIGNED,
+    IN  p_PhonePrimary   VARCHAR(50),
+    IN  p_PhoneSecondary VARCHAR(50),
+    IN  p_Email          VARCHAR(255),
+    IN  p_AddressLine1   VARCHAR(255),
+    IN  p_AddressLine2   VARCHAR(255),
+    IN  p_City           VARCHAR(100),
+    IN  p_State          VARCHAR(50),
+    IN  p_PostalCode     VARCHAR(20),
+    IN  p_Notes          TEXT,
+    OUT p_Success        BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_FirstName IS NULL OR p_FirstName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_LastName IS NULL OR p_LastName = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Relationship IS NULL OR p_Relationship = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_PhonePrimary IS NULL OR p_PhonePrimary = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM emergency_contacts
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE emergency_contacts
+        SET
+            FirstName      = p_FirstName,
+            LastName       = p_LastName,
+            Relationship   = p_Relationship,
+            Priority       = p_Priority,
+            PhonePrimary   = p_PhonePrimary,
+            PhoneSecondary = p_PhoneSecondary,
+            Email          = p_Email,
+            AddressLine1   = p_AddressLine1,
+            AddressLine2   = p_AddressLine2,
+            City           = p_City,
+            State          = p_State,
+            PostalCode     = p_PostalCode,
+            Notes          = p_Notes
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `employers` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(255) NOT NULL,
+  `Phone` varchar(50) DEFAULT NULL,
+  `Fax` varchar(50) DEFAULT NULL,
+  `Email` varchar(255) DEFAULT NULL,
+  `AddressLine1` varchar(255) DEFAULT NULL,
+  `AddressLine2` varchar(255) DEFAULT NULL,
+  `City` varchar(100) DEFAULT NULL,
+  `State` varchar(50) DEFAULT NULL,
+  `PostalCode` varchar(20) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmployersCreate`(
+    IN  p_Name         VARCHAR(255),
+    IN  p_Phone        VARCHAR(50),
+    IN  p_Fax          VARCHAR(50),
+    IN  p_Email        VARCHAR(255),
+    IN  p_AddressLine1 VARCHAR(255),
+    IN  p_AddressLine2 VARCHAR(255),
+    IN  p_City         VARCHAR(100),
+    IN  p_State        VARCHAR(50),
+    IN  p_PostalCode   VARCHAR(20),
+    IN  p_Notes        TEXT,
+    OUT p_Id           BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO employers (
+            Name,
+            Phone,
+            Fax,
+            Email,
+            AddressLine1,
+            AddressLine2,
+            City,
+            State,
+            PostalCode,
+            Notes
+        )
+        VALUES (
+            p_Name,
+            p_Phone,
+            p_Fax,
+            p_Email,
+            p_AddressLine1,
+            p_AddressLine2,
+            p_City,
+            p_State,
+            p_PostalCode,
+            p_Notes
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmployersDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM employers
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Employer not found';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        DELETE FROM employers
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Employer deleted';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmployersGetById`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Phone,
+        Fax,
+        Email,
+        AddressLine1,
+        AddressLine2,
+        City,
+        State,
+        PostalCode,
+        Notes
+    FROM employers
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmployersList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Phone,
+        Fax,
+        Email,
+        AddressLine1,
+        AddressLine2,
+        City,
+        State,
+        PostalCode,
+        Notes
+    FROM employers
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `EmployersUpdate`(
+    IN  p_Id           BIGINT UNSIGNED,
+    IN  p_Name         VARCHAR(255),
+    IN  p_Phone        VARCHAR(50),
+    IN  p_Fax          VARCHAR(50),
+    IN  p_Email        VARCHAR(255),
+    IN  p_AddressLine1 VARCHAR(255),
+    IN  p_AddressLine2 VARCHAR(255),
+    IN  p_City         VARCHAR(100),
+    IN  p_State        VARCHAR(50),
+    IN  p_PostalCode   VARCHAR(20),
+    IN  p_Notes        TEXT,
+    OUT p_Success      BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM employers
+        WHERE Id = p_Id;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE employers
+        SET
+            Name         = p_Name,
+            Phone        = p_Phone,
+            Fax          = p_Fax,
+            Email        = p_Email,
+            AddressLine1 = p_AddressLine1,
+            AddressLine2 = p_AddressLine2,
+            City         = p_City,
+            State        = p_State,
+            PostalCode   = p_PostalCode,
+            Notes        = p_Notes
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `facilities` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `FacilityType` enum('Clinic','Hospital','LongTermCare') NOT NULL,
+  `AddressId` bigint(20) unsigned NOT NULL,
+  `Phone` varchar(20) DEFAULT NULL,
+  `Fax` varchar(20) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `FK_Facilities_Addresses` (`AddressId`),
+  CONSTRAINT `FK_Facilities_Addresses` FOREIGN KEY (`AddressId`) REFERENCES `medical26`.`addresses` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FacilitiesCreate`(
+    IN  p_Name         VARCHAR(100),
+    IN  p_FacilityType ENUM('Clinic','Hospital','LongTermCare'),
+    IN  p_AddressId    BIGINT UNSIGNED,
+    IN  p_Phone        VARCHAR(20),
+    IN  p_Fax          VARCHAR(20),
+    OUT p_Id           BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Id = 0;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_FacilityType IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_AddressId IS NULL OR p_AddressId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO facilities (
+            Name,
+            FacilityType,
+            AddressId,
+            Phone,
+            Fax,
+            Active
+        )
+        VALUES (
+            p_Name,
+            p_FacilityType,
+            p_AddressId,
+            p_Phone,
+            p_Fax,
+            TRUE
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FacilitiesDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN,
+    OUT p_Message VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+
+    SET p_Success = FALSE;
+    SET p_Message = '';
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+        SET p_Message = 'Invalid Id';
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM facilities
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+            SET p_Message = 'Facility not found or already inactive';
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE facilities
+        SET Active = FALSE
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+        SET p_Message = 'Facility deactivated';
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FacilitiesGetById`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT
+        Id,
+        Name,
+        FacilityType,
+        AddressId,
+        Phone,
+        Fax,
+        Active,
+        Created,
+        Updated
+    FROM facilities
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FacilitiesList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        FacilityType,
+        AddressId,
+        Phone,
+        Fax,
+        Active,
+        Created,
+        Updated
+    FROM facilities
+    WHERE Active = TRUE
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FacilitiesListAll`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        FacilityType,
+        AddressId,
+        Phone,
+        Fax,
+        Active,
+        Created,
+        Updated
+    FROM facilities
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FacilitiesUpdate`(
+    IN  p_Id           BIGINT UNSIGNED,
+    IN  p_Name         VARCHAR(100),
+    IN  p_FacilityType ENUM('Clinic','Hospital','LongTermCare'),
+    IN  p_AddressId    BIGINT UNSIGNED,
+    IN  p_Phone        VARCHAR(20),
+    IN  p_Fax          VARCHAR(20),
+    OUT p_Success      BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_FacilityType IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF p_AddressId IS NULL OR p_AddressId = 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM facilities
+        WHERE Id = p_Id AND Active = TRUE;
+
+        IF v_exists IS NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE facilities
+        SET
+            Name         = p_Name,
+            FacilityType = p_FacilityType,
+            AddressId    = p_AddressId,
+            Phone        = p_Phone,
+            Fax          = p_Fax
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `fee_schedules` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `BillingCodeId` bigint(20) unsigned NOT NULL,
+  `Payer` varchar(100) NOT NULL,
+  `AllowedAmount` decimal(10,2) NOT NULL,
+  `EffectiveDate` date NOT NULL,
+  `EndDate` date DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FeeSchedulesCreate`(
+    IN  p_BillingCodeId BIGINT UNSIGNED,
+    IN  p_Payer         VARCHAR(100),
+    IN  p_AllowedAmount DECIMAL(10,2),
+    IN  p_EffectiveDate DATE,
+    IN  p_EndDate       DATE,
+    OUT p_Id            BIGINT
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Id = 0;
+
+    
+    SELECT Id INTO v_exists
+    FROM billing_codes
+    WHERE Id = p_BillingCodeId AND Active = TRUE;
+
+    IF v_exists IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF p_Payer IS NULL OR p_Payer = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF p_AllowedAmount <= 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF p_EndDate IS NOT NULL AND p_EndDate < p_EffectiveDate THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM fee_schedules
+        WHERE BillingCodeId = p_BillingCodeId
+          AND Payer = p_Payer
+          AND (
+                (p_EndDate IS NULL AND EffectiveDate <= p_EffectiveDate)
+                OR
+                (EndDate IS NULL AND p_EffectiveDate <= EffectiveDate)
+                OR
+                (p_EndDate IS NOT NULL AND EndDate IS NOT NULL AND p_EffectiveDate <= EndDate AND p_EndDate >= EffectiveDate)
+              )
+        LIMIT 1;
+
+        IF v_exists IS NOT NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        INSERT INTO fee_schedules (
+            BillingCodeId,
+            Payer,
+            AllowedAmount,
+            EffectiveDate,
+            EndDate
+        )
+        VALUES (
+            p_BillingCodeId,
+            p_Payer,
+            p_AllowedAmount,
+            p_EffectiveDate,
+            p_EndDate
+        );
+
+        SET p_Id = LAST_INSERT_ID();
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FeeSchedulesDelete`(
+    IN  p_Id BIGINT UNSIGNED,
+    OUT p_Success BOOLEAN
+)
+BEGIN
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    SELECT Id INTO v_exists
+    FROM fee_schedules
+    WHERE Id = p_Id;
+
+    IF v_exists IS NOT NULL THEN
+        DELETE FROM fee_schedules WHERE Id = p_Id;
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FeeSchedulesGetById`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM fee_schedules
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FeeSchedulesListActive`()
+BEGIN
+    SELECT *
+    FROM fee_schedules
+    WHERE EffectiveDate <= CURRENT_DATE()
+      AND (EndDate IS NULL OR EndDate >= CURRENT_DATE())
+    ORDER BY Payer, BillingCodeId;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FeeSchedulesListByBillingCode`(
+    IN p_BillingCodeId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM fee_schedules
+    WHERE BillingCodeId = p_BillingCodeId
+    ORDER BY Payer, EffectiveDate;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FeeSchedulesListByPayer`(
+    IN p_Payer VARCHAR(100)
+)
+BEGIN
+    SELECT *
+    FROM fee_schedules
+    WHERE Payer = p_Payer
+    ORDER BY BillingCodeId, EffectiveDate;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FeeSchedulesUpdate`(
+    IN  p_Id            BIGINT UNSIGNED,
+    IN  p_BillingCodeId BIGINT UNSIGNED,
+    IN  p_Payer         VARCHAR(100),
+    IN  p_AllowedAmount DECIMAL(10,2),
+    IN  p_EffectiveDate DATE,
+    IN  p_EndDate       DATE,
+    OUT p_Success       BOOLEAN
+)
+BEGIN
+    DECLARE v_is_valid BOOLEAN DEFAULT TRUE;
+    DECLARE v_exists BIGINT UNSIGNED;
+
+    SET p_Success = FALSE;
+
+    
+    SELECT Id INTO v_exists
+    FROM fee_schedules
+    WHERE Id = p_Id;
+
+    IF v_exists IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    SELECT Id INTO v_exists
+    FROM billing_codes
+    WHERE Id = p_BillingCodeId AND Active = TRUE;
+
+    IF v_exists IS NULL THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF p_Payer IS NULL OR p_Payer = '' THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF p_AllowedAmount <= 0 THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF p_EndDate IS NOT NULL AND p_EndDate < p_EffectiveDate THEN
+        SET v_is_valid = FALSE;
+    END IF;
+
+    
+    IF v_is_valid THEN
+        SELECT Id INTO v_exists
+        FROM fee_schedules
+        WHERE BillingCodeId = p_BillingCodeId
+          AND Payer = p_Payer
+          AND Id <> p_Id
+          AND (
+                (p_EndDate IS NULL AND EffectiveDate <= p_EffectiveDate)
+                OR
+                (EndDate IS NULL AND p_EffectiveDate <= EffectiveDate)
+                OR
+                (p_EndDate IS NOT NULL AND EndDate IS NOT NULL AND p_EffectiveDate <= EndDate AND p_EndDate >= EffectiveDate)
+              )
+        LIMIT 1;
+
+        IF v_exists IS NOT NULL THEN
+            SET v_is_valid = FALSE;
+        END IF;
+    END IF;
+
+    IF v_is_valid THEN
+        UPDATE fee_schedules
+        SET
+            BillingCodeId = p_BillingCodeId,
+            Payer         = p_Payer,
+            AllowedAmount = p_AllowedAmount,
+            EffectiveDate = p_EffectiveDate,
+            EndDate       = p_EndDate
+        WHERE Id = p_Id;
+
+        SET p_Success = TRUE;
+    END IF;
+
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `flowsheet_definitions` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(255) NOT NULL,
+  `Description` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `flowsheet_entries` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `FlowsheetId` bigint(20) unsigned NOT NULL,
+  `EntryTime` datetime NOT NULL,
+  `EnteredBy` bigint(20) unsigned DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_FlowsheetEntries_PatientId` (`PatientId`),
+  KEY `IX_FlowsheetEntries_VisitId` (`VisitId`),
+  KEY `IX_FlowsheetEntries_FlowsheetId` (`FlowsheetId`),
+  CONSTRAINT `FK_FlowsheetEntries_Flowsheets` FOREIGN KEY (`FlowsheetId`) REFERENCES `flowsheet_definitions` (`Id`),
+  CONSTRAINT `FK_FlowsheetEntries_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_FlowsheetEntries_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `flowsheet_fields` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `FlowsheetId` bigint(20) unsigned NOT NULL,
+  `Name` varchar(255) NOT NULL,
+  `Unit` varchar(50) DEFAULT NULL,
+  `FieldType` enum('Numeric','Text','Enum','Boolean') NOT NULL DEFAULT 'Numeric',
+  `EnumOptions` text DEFAULT NULL,
+  `SortOrder` int(10) unsigned NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_FlowsheetFields_FlowsheetId` (`FlowsheetId`),
+  CONSTRAINT `FK_FlowsheetFields_Flowsheets` FOREIGN KEY (`FlowsheetId`) REFERENCES `flowsheet_definitions` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `flowsheet_values` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `EntryId` bigint(20) unsigned NOT NULL,
+  `FieldId` bigint(20) unsigned NOT NULL,
+  `NumericValue` decimal(10,2) DEFAULT NULL,
+  `TextValue` text DEFAULT NULL,
+  `EnumValue` varchar(255) DEFAULT NULL,
+  `BooleanValue` tinyint(1) DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_FlowsheetValues_EntryId` (`EntryId`),
+  KEY `IX_FlowsheetValues_FieldId` (`FieldId`),
+  CONSTRAINT `FK_FlowsheetValues_Entries` FOREIGN KEY (`EntryId`) REFERENCES `flowsheet_entries` (`Id`),
+  CONSTRAINT `FK_FlowsheetValues_Fields` FOREIGN KEY (`FieldId`) REFERENCES `flowsheet_fields` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetDefinitionsCreate`(
+    IN p_Name VARCHAR(255),
+    IN p_Description TEXT,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO flowsheet_definitions
+        (Name, Description, Active)
+        VALUES
+        (p_Name, p_Description, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetDefinitionsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE flowsheet_definitions
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetDefinitionsDeleteHard`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM flowsheet_definitions
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetDefinitionsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM flowsheet_definitions
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetDefinitionsList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Description,
+        Active
+    FROM flowsheet_definitions
+    WHERE Active = 1
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetDefinitionsListAll`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Description,
+        Active
+    FROM flowsheet_definitions
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetDefinitionsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT
+        Id,
+        Name,
+        Description,
+        Active
+    FROM flowsheet_definitions
+    WHERE
+        (v_Search IS NULL)
+        OR (Name LIKE v_Search)
+        OR (Description LIKE v_Search)
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetDefinitionsSearchActive`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT
+        Id,
+        Name,
+        Description,
+        Active
+    FROM flowsheet_definitions
+    WHERE
+        Active = 1
+        AND (
+                v_Search IS NULL
+                OR Name LIKE v_Search
+                OR Description LIKE v_Search
+            )
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetDefinitionsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(255),
+    IN p_Description TEXT,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE flowsheet_definitions
+        SET
+            Name = p_Name,
+            Description = p_Description,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetEntriesCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_FlowsheetId BIGINT UNSIGNED,
+    IN p_EntryTime DATETIME,
+    IN p_EnteredBy BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FlowsheetId IS NULL OR p_FlowsheetId = 0) THEN
+        SET v_Error = 'FlowsheetId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_EntryTime IS NULL THEN
+        SET v_Error = 'EntryTime is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO flowsheet_entries
+        (PatientId, VisitId, FlowsheetId, EntryTime, EnteredBy, Notes)
+        VALUES
+        (p_PatientId, p_VisitId, p_FlowsheetId, p_EntryTime, p_EnteredBy, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetEntriesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM flowsheet_entries
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetEntriesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM flowsheet_entries
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetEntriesListAll`()
+BEGIN
+    SELECT
+        Id,
+        PatientId,
+        VisitId,
+        FlowsheetId,
+        EntryTime,
+        EnteredBy,
+        Notes
+    FROM flowsheet_entries
+    ORDER BY EntryTime DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetEntriesListByFlowsheet`(
+    IN p_FlowsheetId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_FlowsheetId IS NULL OR p_FlowsheetId = 0 THEN
+        SET v_Error = 'Invalid FlowsheetId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT
+            Id,
+            PatientId,
+            VisitId,
+            FlowsheetId,
+            EntryTime,
+            EnteredBy,
+            Notes
+        FROM flowsheet_entries
+        WHERE FlowsheetId = p_FlowsheetId
+        ORDER BY EntryTime DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetEntriesListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT
+            Id,
+            PatientId,
+            VisitId,
+            FlowsheetId,
+            EntryTime,
+            EnteredBy,
+            Notes
+        FROM flowsheet_entries
+        WHERE PatientId = p_PatientId
+        ORDER BY EntryTime DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetEntriesListByVisit`(
+    IN p_VisitId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_VisitId IS NULL OR p_VisitId = 0 THEN
+        SET v_Error = 'Invalid VisitId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT
+            Id,
+            PatientId,
+            VisitId,
+            FlowsheetId,
+            EntryTime,
+            EnteredBy,
+            Notes
+        FROM flowsheet_entries
+        WHERE VisitId = p_VisitId
+        ORDER BY EntryTime DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetEntriesSearchNotes`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT
+        Id,
+        PatientId,
+        VisitId,
+        FlowsheetId,
+        EntryTime,
+        EnteredBy,
+        Notes
+    FROM flowsheet_entries
+    WHERE
+        v_Search IS NULL
+        OR Notes LIKE v_Search
+    ORDER BY EntryTime DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetEntriesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_FlowsheetId BIGINT UNSIGNED,
+    IN p_EntryTime DATETIME,
+    IN p_EnteredBy BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FlowsheetId IS NULL OR p_FlowsheetId = 0) THEN
+        SET v_Error = 'FlowsheetId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_EntryTime IS NULL THEN
+        SET v_Error = 'EntryTime is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE flowsheet_entries
+        SET
+            PatientId = p_PatientId,
+            VisitId = p_VisitId,
+            FlowsheetId = p_FlowsheetId,
+            EntryTime = p_EntryTime,
+            EnteredBy = p_EnteredBy,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetFieldsCreate`(
+    IN p_FlowsheetId BIGINT UNSIGNED,
+    IN p_Name VARCHAR(255),
+    IN p_Unit VARCHAR(50),
+    IN p_FieldType ENUM('Numeric','Text','Enum','Boolean'),
+    IN p_EnumOptions TEXT,
+    IN p_SortOrder INT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_FlowsheetId IS NULL OR p_FlowsheetId = 0 THEN
+        SET v_Error = 'FlowsheetId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_FieldType IS NULL THEN
+        SET v_Error = 'FieldType is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_FieldType = 'Enum' AND (p_EnumOptions IS NULL OR p_EnumOptions = '') THEN
+        SET v_Error = 'EnumOptions required for Enum FieldType';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO flowsheet_fields
+        (FlowsheetId, Name, Unit, FieldType, EnumOptions, SortOrder)
+        VALUES
+        (p_FlowsheetId, p_Name, p_Unit, p_FieldType, p_EnumOptions, p_SortOrder);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetFieldsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM flowsheet_fields
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetFieldsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM flowsheet_fields
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetFieldsListAll`()
+BEGIN
+    SELECT
+        Id,
+        FlowsheetId,
+        Name,
+        Unit,
+        FieldType,
+        EnumOptions,
+        SortOrder
+    FROM flowsheet_fields
+    ORDER BY FlowsheetId, SortOrder, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetFieldsListByFlowsheet`(
+    IN p_FlowsheetId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_FlowsheetId IS NULL OR p_FlowsheetId = 0 THEN
+        SET v_Error = 'Invalid FlowsheetId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT
+            Id,
+            FlowsheetId,
+            Name,
+            Unit,
+            FieldType,
+            EnumOptions,
+            SortOrder
+        FROM flowsheet_fields
+        WHERE FlowsheetId = p_FlowsheetId
+        ORDER BY SortOrder, Name;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetFieldsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT
+        Id,
+        FlowsheetId,
+        Name,
+        Unit,
+        FieldType,
+        EnumOptions,
+        SortOrder
+    FROM flowsheet_fields
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Unit LIKE v_Search
+        OR EnumOptions LIKE v_Search
+    ORDER BY FlowsheetId, SortOrder, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetFieldsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_FlowsheetId BIGINT UNSIGNED,
+    IN p_Name VARCHAR(255),
+    IN p_Unit VARCHAR(50),
+    IN p_FieldType ENUM('Numeric','Text','Enum','Boolean'),
+    IN p_EnumOptions TEXT,
+    IN p_SortOrder INT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FlowsheetId IS NULL OR p_FlowsheetId = 0) THEN
+        SET v_Error = 'FlowsheetId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_FieldType IS NULL THEN
+        SET v_Error = 'FieldType is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_FieldType = 'Enum' AND (p_EnumOptions IS NULL OR p_EnumOptions = '') THEN
+        SET v_Error = 'EnumOptions required for Enum FieldType';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE flowsheet_fields
+        SET
+            FlowsheetId = p_FlowsheetId,
+            Name = p_Name,
+            Unit = p_Unit,
+            FieldType = p_FieldType,
+            EnumOptions = p_EnumOptions,
+            SortOrder = p_SortOrder
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetValuesCreate`(
+    IN p_EntryId BIGINT UNSIGNED,
+    IN p_FieldId BIGINT UNSIGNED,
+    IN p_NumericValue DECIMAL(10,2),
+    IN p_TextValue TEXT,
+    IN p_EnumValue VARCHAR(255),
+    IN p_BooleanValue TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_EntryId IS NULL OR p_EntryId = 0 THEN
+        SET v_Error = 'EntryId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FieldId IS NULL OR p_FieldId = 0) THEN
+        SET v_Error = 'FieldId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO flowsheet_values
+        (EntryId, FieldId, NumericValue, TextValue, EnumValue, BooleanValue)
+        VALUES
+        (p_EntryId, p_FieldId, p_NumericValue, p_TextValue, p_EnumValue, p_BooleanValue);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetValuesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM flowsheet_values
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetValuesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM flowsheet_values
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetValuesListAll`()
+BEGIN
+    SELECT *
+    FROM flowsheet_values
+    ORDER BY EntryId, FieldId;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetValuesListByEntry`(
+    IN p_EntryId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_EntryId IS NULL OR p_EntryId = 0 THEN
+        SET v_Error = 'Invalid EntryId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM flowsheet_values
+        WHERE EntryId = p_EntryId
+        ORDER BY FieldId;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetValuesListByField`(
+    IN p_FieldId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_FieldId IS NULL OR p_FieldId = 0 THEN
+        SET v_Error = 'Invalid FieldId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM flowsheet_values
+        WHERE FieldId = p_FieldId
+        ORDER BY EntryId;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetValuesSearchText`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM flowsheet_values
+    WHERE
+        v_Search IS NULL
+        OR TextValue LIKE v_Search
+        OR EnumValue LIKE v_Search
+    ORDER BY EntryId, FieldId;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FlowsheetValuesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_EntryId BIGINT UNSIGNED,
+    IN p_FieldId BIGINT UNSIGNED,
+    IN p_NumericValue DECIMAL(10,2),
+    IN p_TextValue TEXT,
+    IN p_EnumValue VARCHAR(255),
+    IN p_BooleanValue TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_EntryId IS NULL OR p_EntryId = 0) THEN
+        SET v_Error = 'EntryId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FieldId IS NULL OR p_FieldId = 0) THEN
+        SET v_Error = 'FieldId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE flowsheet_values
+        SET
+            EntryId = p_EntryId,
+            FieldId = p_FieldId,
+            NumericValue = p_NumericValue,
+            TextValue = p_TextValue,
+            EnumValue = p_EnumValue,
+            BooleanValue = p_BooleanValue
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` FUNCTION `GetPatientAge`(p_DOB DATE) RETURNS int(11)
+    DETERMINISTIC
+BEGIN
+    RETURN TIMESTAMPDIFF(YEAR, p_DOB, CURDATE());
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `guarantors` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Type` enum('Person','Organization') NOT NULL DEFAULT 'Person',
+  `FirstName` varchar(100) DEFAULT NULL,
+  `LastName` varchar(100) DEFAULT NULL,
+  `OrganizationName` varchar(255) DEFAULT NULL,
+  `Phone` varchar(50) DEFAULT NULL,
+  `Email` varchar(255) DEFAULT NULL,
+  `AddressLine1` varchar(255) DEFAULT NULL,
+  `AddressLine2` varchar(255) DEFAULT NULL,
+  `City` varchar(100) DEFAULT NULL,
+  `State` varchar(50) DEFAULT NULL,
+  `PostalCode` varchar(20) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `GuarantorsCreate`(
+    IN p_Type ENUM('Person','Organization'),
+    IN p_FirstName VARCHAR(100),
+    IN p_LastName VARCHAR(100),
+    IN p_OrganizationName VARCHAR(255),
+    IN p_Phone VARCHAR(50),
+    IN p_Email VARCHAR(255),
+    IN p_AddressLine1 VARCHAR(255),
+    IN p_AddressLine2 VARCHAR(255),
+    IN p_City VARCHAR(100),
+    IN p_State VARCHAR(50),
+    IN p_PostalCode VARCHAR(20),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    
+    IF p_Type IS NULL THEN
+        SET v_Error = 'Type is required';
+    END IF;
+
+    
+    IF v_Error IS NULL AND p_Type = 'Person' AND (p_FirstName IS NULL OR p_FirstName = '') THEN
+        SET v_Error = 'FirstName required for Person';
+    END IF;
+
+    IF v_Error IS NULL AND p_Type = 'Person' AND (p_LastName IS NULL OR p_LastName = '') THEN
+        SET v_Error = 'LastName required for Person';
+    END IF;
+
+    
+    IF v_Error IS NULL AND p_Type = 'Organization' AND (p_OrganizationName IS NULL OR p_OrganizationName = '') THEN
+        SET v_Error = 'OrganizationName required for Organization';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO guarantors
+        (Type, FirstName, LastName, OrganizationName, Phone, Email,
+         AddressLine1, AddressLine2, City, State, PostalCode, Notes)
+        VALUES
+        (p_Type, p_FirstName, p_LastName, p_OrganizationName, p_Phone, p_Email,
+         p_AddressLine1, p_AddressLine2, p_City, p_State, p_PostalCode, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `GuarantorsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM guarantors
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `GuarantorsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM guarantors
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `GuarantorsList`()
+BEGIN
+    SELECT
+        Id,
+        Type,
+        FirstName,
+        LastName,
+        OrganizationName,
+        Phone,
+        Email,
+        City,
+        State,
+        PostalCode
+    FROM guarantors
+    ORDER BY
+        Type,
+        LastName,
+        FirstName,
+        OrganizationName;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `GuarantorsListAll`()
+BEGIN
+    SELECT *
+    FROM guarantors
+    ORDER BY
+        Type,
+        LastName,
+        FirstName,
+        OrganizationName;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `GuarantorsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM guarantors
+    WHERE
+        v_Search IS NULL
+        OR FirstName LIKE v_Search
+        OR LastName LIKE v_Search
+        OR OrganizationName LIKE v_Search
+        OR Phone LIKE v_Search
+        OR Email LIKE v_Search
+        OR City LIKE v_Search
+        OR State LIKE v_Search
+        OR PostalCode LIKE v_Search
+    ORDER BY
+        Type,
+        LastName,
+        FirstName,
+        OrganizationName;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `GuarantorsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Type ENUM('Person','Organization'),
+    IN p_FirstName VARCHAR(100),
+    IN p_LastName VARCHAR(100),
+    IN p_OrganizationName VARCHAR(255),
+    IN p_Phone VARCHAR(50),
+    IN p_Email VARCHAR(255),
+    IN p_AddressLine1 VARCHAR(255),
+    IN p_AddressLine2 VARCHAR(255),
+    IN p_City VARCHAR(100),
+    IN p_State VARCHAR(50),
+    IN p_PostalCode VARCHAR(20),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND p_Type IS NULL THEN
+        SET v_Error = 'Type is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Type = 'Person' AND (p_FirstName IS NULL OR p_FirstName = '') THEN
+        SET v_Error = 'FirstName required for Person';
+    END IF;
+
+    IF v_Error IS NULL AND p_Type = 'Person' AND (p_LastName IS NULL OR p_LastName = '') THEN
+        SET v_Error = 'LastName required for Person';
+    END IF;
+
+    IF v_Error IS NULL AND p_Type = 'Organization' AND (p_OrganizationName IS NULL OR p_OrganizationName = '') THEN
+        SET v_Error = 'OrganizationName required for Organization';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE guarantors
+        SET
+            Type = p_Type,
+            FirstName = p_FirstName,
+            LastName = p_LastName,
+            OrganizationName = p_OrganizationName,
+            Phone = p_Phone,
+            Email = p_Email,
+            AddressLine1 = p_AddressLine1,
+            AddressLine2 = p_AddressLine2,
+            City = p_City,
+            State = p_State,
+            PostalCode = p_PostalCode,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` FUNCTION `HHMMToDecimal`(p_HHMM VARCHAR(10)) RETURNS decimal(4,2)
+    DETERMINISTIC
+BEGIN
+    DECLARE v_hours INT DEFAULT 0;
+    DECLARE v_minutes INT DEFAULT 0;
+    DECLARE v_colon INT DEFAULT 0;
+    DECLARE v_result DECIMAL(4,2) DEFAULT 0.00;
+
+    
+    IF p_HHMM IS NULL OR p_HHMM = '' THEN
+        RETURN NULL;
+    END IF;
+
+    
+    SET v_colon = INSTR(p_HHMM, ':');
+    IF v_colon = 0 THEN
+        RETURN NULL; 
+    END IF;
+
+    
+    SET v_hours = CAST(SUBSTRING(p_HHMM, 1, v_colon - 1) AS UNSIGNED);
+    SET v_minutes = CAST(SUBSTRING(p_HHMM, v_colon + 1) AS UNSIGNED);
+
+    
+    IF v_minutes < 0 OR v_minutes > 59 THEN
+        RETURN NULL;
+    END IF;
+
+    
+    SET v_result = v_hours + (v_minutes / 60);
+
+    RETURN v_result;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `imaging_files` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `SeriesId` bigint(20) unsigned DEFAULT NULL,
+  `StudyId` bigint(20) unsigned NOT NULL,
+  `FilePath` varchar(500) NOT NULL,
+  `FileType` enum('DICOM','JPEG','PNG','MP4') NOT NULL,
+  `InstanceNumber` int(10) unsigned DEFAULT NULL,
+  `UploadedAt` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_ImagingFiles_StudyId` (`StudyId`),
+  KEY `IX_ImagingFiles_SeriesId` (`SeriesId`),
+  CONSTRAINT `FK_ImagingFiles_Series` FOREIGN KEY (`SeriesId`) REFERENCES `imaging_series` (`Id`),
+  CONSTRAINT `FK_ImagingFiles_Studies` FOREIGN KEY (`StudyId`) REFERENCES `imaging_studies` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `imaging_orders` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `OrderedBy` bigint(20) unsigned DEFAULT NULL,
+  `OrderDate` datetime NOT NULL,
+  `Modality` enum('XR','CT','MRI','US','PET','NM','MAMMO','DEXA') NOT NULL,
+  `BodyPart` varchar(255) NOT NULL,
+  `Reason` text DEFAULT NULL,
+  `Status` enum('Ordered','Scheduled','Completed','Cancelled') NOT NULL DEFAULT 'Ordered',
+  PRIMARY KEY (`Id`),
+  KEY `IX_ImagingOrders_PatientId` (`PatientId`),
+  KEY `IX_ImagingOrders_VisitId` (`VisitId`),
+  CONSTRAINT `FK_ImagingOrders_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_ImagingOrders_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `imaging_reports` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `StudyId` bigint(20) unsigned NOT NULL,
+  `ReportedBy` bigint(20) unsigned DEFAULT NULL,
+  `ReportDate` datetime NOT NULL,
+  `Impression` text NOT NULL,
+  `Findings` text DEFAULT NULL,
+  `Recommendations` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_ImagingReports_StudyId` (`StudyId`),
+  CONSTRAINT `FK_ImagingReports_Studies` FOREIGN KEY (`StudyId`) REFERENCES `imaging_studies` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `imaging_series` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `StudyId` bigint(20) unsigned NOT NULL,
+  `SeriesNumber` int(10) unsigned NOT NULL,
+  `Description` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_ImagingSeries_StudyId` (`StudyId`),
+  CONSTRAINT `FK_ImagingSeries_Studies` FOREIGN KEY (`StudyId`) REFERENCES `imaging_studies` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `imaging_studies` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `OrderId` bigint(20) unsigned NOT NULL,
+  `StudyDate` datetime NOT NULL,
+  `AccessionNumber` varchar(100) DEFAULT NULL,
+  `Modality` enum('XR','CT','MRI','US','PET','NM','MAMMO','DEXA') NOT NULL,
+  `Status` enum('InProgress','Completed','Finalized') NOT NULL DEFAULT 'InProgress',
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_ImagingStudies_OrderId` (`OrderId`),
+  CONSTRAINT `FK_ImagingStudies_Orders` FOREIGN KEY (`OrderId`) REFERENCES `imaging_orders` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingFilesCreate`(
+    IN p_SeriesId BIGINT UNSIGNED,
+    IN p_StudyId BIGINT UNSIGNED,
+    IN p_FilePath VARCHAR(500),
+    IN p_FileType ENUM('DICOM','JPEG','PNG','MP4'),
+    IN p_InstanceNumber INT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_StudyId IS NULL OR p_StudyId = 0 THEN
+        SET v_Error = 'StudyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FilePath IS NULL OR p_FilePath = '') THEN
+        SET v_Error = 'FilePath is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_FileType IS NULL THEN
+        SET v_Error = 'FileType is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO imaging_files
+        (SeriesId, StudyId, FilePath, FileType, InstanceNumber)
+        VALUES
+        (p_SeriesId, p_StudyId, p_FilePath, p_FileType, p_InstanceNumber);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingFilesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM imaging_files
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingFilesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_files
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingFilesListAll`()
+BEGIN
+    SELECT *
+    FROM imaging_files
+    ORDER BY StudyId, SeriesId, InstanceNumber, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingFilesListBySeries`(
+    IN p_SeriesId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_SeriesId IS NULL OR p_SeriesId = 0 THEN
+        SET v_Error = 'Invalid SeriesId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_files
+        WHERE SeriesId = p_SeriesId
+        ORDER BY InstanceNumber, Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingFilesListByStudy`(
+    IN p_StudyId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_StudyId IS NULL OR p_StudyId = 0 THEN
+        SET v_Error = 'Invalid StudyId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_files
+        WHERE StudyId = p_StudyId
+        ORDER BY SeriesId, InstanceNumber, Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingFilesSearchPath`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM imaging_files
+    WHERE
+        v_Search IS NULL
+        OR FilePath LIKE v_Search
+    ORDER BY StudyId, SeriesId, InstanceNumber, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingFilesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_SeriesId BIGINT UNSIGNED,
+    IN p_StudyId BIGINT UNSIGNED,
+    IN p_FilePath VARCHAR(500),
+    IN p_FileType ENUM('DICOM','JPEG','PNG','MP4'),
+    IN p_InstanceNumber INT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_StudyId IS NULL OR p_StudyId = 0) THEN
+        SET v_Error = 'StudyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FilePath IS NULL OR p_FilePath = '') THEN
+        SET v_Error = 'FilePath is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_FileType IS NULL THEN
+        SET v_Error = 'FileType is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE imaging_files
+        SET
+            SeriesId = p_SeriesId,
+            StudyId = p_StudyId,
+            FilePath = p_FilePath,
+            FileType = p_FileType,
+            InstanceNumber = p_InstanceNumber
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingOrdersCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_OrderedBy BIGINT UNSIGNED,
+    IN p_OrderDate DATETIME,
+    IN p_Modality ENUM('XR','CT','MRI','US','PET','NM','MAMMO','DEXA'),
+    IN p_BodyPart VARCHAR(255),
+    IN p_Reason TEXT,
+    IN p_Status ENUM('Ordered','Scheduled','Completed','Cancelled')
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_OrderDate IS NULL THEN
+        SET v_Error = 'OrderDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Modality IS NULL THEN
+        SET v_Error = 'Modality is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_BodyPart IS NULL OR p_BodyPart = '') THEN
+        SET v_Error = 'BodyPart is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO imaging_orders
+        (PatientId, VisitId, OrderedBy, OrderDate, Modality, BodyPart, Reason, Status)
+        VALUES
+        (p_PatientId, p_VisitId, p_OrderedBy, p_OrderDate, p_Modality, p_BodyPart, p_Reason, p_Status);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingOrdersDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM imaging_orders
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingOrdersGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_orders
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingOrdersListAll`()
+BEGIN
+    SELECT *
+    FROM imaging_orders
+    ORDER BY OrderDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingOrdersListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_orders
+        WHERE PatientId = p_PatientId
+        ORDER BY OrderDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingOrdersListByStatus`(
+    IN p_Status ENUM('Ordered','Scheduled','Completed','Cancelled')
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Status IS NULL THEN
+        SET v_Error = 'Invalid Status';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_orders
+        WHERE Status = p_Status
+        ORDER BY OrderDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingOrdersListByVisit`(
+    IN p_VisitId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_VisitId IS NULL OR p_VisitId = 0 THEN
+        SET v_Error = 'Invalid VisitId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_orders
+        WHERE VisitId = p_VisitId
+        ORDER BY OrderDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingOrdersSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM imaging_orders
+    WHERE
+        v_Search IS NULL
+        OR BodyPart LIKE v_Search
+        OR Reason LIKE v_Search
+        OR Modality LIKE v_Search
+        OR Status LIKE v_Search
+    ORDER BY OrderDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingOrdersUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_OrderedBy BIGINT UNSIGNED,
+    IN p_OrderDate DATETIME,
+    IN p_Modality ENUM('XR','CT','MRI','US','PET','NM','MAMMO','DEXA'),
+    IN p_BodyPart VARCHAR(255),
+    IN p_Reason TEXT,
+    IN p_Status ENUM('Ordered','Scheduled','Completed','Cancelled')
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_OrderDate IS NULL THEN
+        SET v_Error = 'OrderDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Modality IS NULL THEN
+        SET v_Error = 'Modality is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_BodyPart IS NULL OR p_BodyPart = '') THEN
+        SET v_Error = 'BodyPart is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE imaging_orders
+        SET
+            PatientId = p_PatientId,
+            VisitId = p_VisitId,
+            OrderedBy = p_OrderedBy,
+            OrderDate = p_OrderDate,
+            Modality = p_Modality,
+            BodyPart = p_BodyPart,
+            Reason = p_Reason,
+            Status = p_Status
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingReportsCreate`(
+    IN p_StudyId BIGINT UNSIGNED,
+    IN p_ReportedBy BIGINT UNSIGNED,
+    IN p_ReportDate DATETIME,
+    IN p_Impression TEXT,
+    IN p_Findings TEXT,
+    IN p_Recommendations TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_StudyId IS NULL OR p_StudyId = 0 THEN
+        SET v_Error = 'StudyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ReportDate IS NULL THEN
+        SET v_Error = 'ReportDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Impression IS NULL OR p_Impression = '') THEN
+        SET v_Error = 'Impression is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO imaging_reports
+        (StudyId, ReportedBy, ReportDate, Impression, Findings, Recommendations)
+        VALUES
+        (p_StudyId, p_ReportedBy, p_ReportDate, p_Impression, p_Findings, p_Recommendations);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingReportsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM imaging_reports
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingReportsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_reports
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingReportsListAll`()
+BEGIN
+    SELECT *
+    FROM imaging_reports
+    ORDER BY ReportDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingReportsListByReporter`(
+    IN p_ReportedBy BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_ReportedBy IS NULL OR p_ReportedBy = 0 THEN
+        SET v_Error = 'Invalid ReportedBy';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_reports
+        WHERE ReportedBy = p_ReportedBy
+        ORDER BY ReportDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingReportsListByStudy`(
+    IN p_StudyId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_StudyId IS NULL OR p_StudyId = 0 THEN
+        SET v_Error = 'Invalid StudyId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_reports
+        WHERE StudyId = p_StudyId
+        ORDER BY ReportDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingReportsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM imaging_reports
+    WHERE
+        v_Search IS NULL
+        OR Impression LIKE v_Search
+        OR Findings LIKE v_Search
+        OR Recommendations LIKE v_Search
+    ORDER BY ReportDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingReportsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_StudyId BIGINT UNSIGNED,
+    IN p_ReportedBy BIGINT UNSIGNED,
+    IN p_ReportDate DATETIME,
+    IN p_Impression TEXT,
+    IN p_Findings TEXT,
+    IN p_Recommendations TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_StudyId IS NULL OR p_StudyId = 0) THEN
+        SET v_Error = 'StudyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ReportDate IS NULL THEN
+        SET v_Error = 'ReportDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Impression IS NULL OR p_Impression = '') THEN
+        SET v_Error = 'Impression is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE imaging_reports
+        SET
+            StudyId = p_StudyId,
+            ReportedBy = p_ReportedBy,
+            ReportDate = p_ReportDate,
+            Impression = p_Impression,
+            Findings = p_Findings,
+            Recommendations = p_Recommendations
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingSeriesCreate`(
+    IN p_StudyId BIGINT UNSIGNED,
+    IN p_SeriesNumber INT UNSIGNED,
+    IN p_Description VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_StudyId IS NULL OR p_StudyId = 0 THEN
+        SET v_Error = 'StudyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_SeriesNumber IS NULL OR p_SeriesNumber = 0) THEN
+        SET v_Error = 'SeriesNumber is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO imaging_series
+        (StudyId, SeriesNumber, Description)
+        VALUES
+        (p_StudyId, p_SeriesNumber, p_Description);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingSeriesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM imaging_series
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingSeriesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_series
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingSeriesListAll`()
+BEGIN
+    SELECT *
+    FROM imaging_series
+    ORDER BY StudyId, SeriesNumber, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingSeriesListByStudy`(
+    IN p_StudyId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_StudyId IS NULL OR p_StudyId = 0 THEN
+        SET v_Error = 'Invalid StudyId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_series
+        WHERE StudyId = p_StudyId
+        ORDER BY SeriesNumber, Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingSeriesSearchDescription`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM imaging_series
+    WHERE
+        v_Search IS NULL
+        OR Description LIKE v_Search
+    ORDER BY StudyId, SeriesNumber, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingSeriesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_StudyId BIGINT UNSIGNED,
+    IN p_SeriesNumber INT UNSIGNED,
+    IN p_Description VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_StudyId IS NULL OR p_StudyId = 0) THEN
+        SET v_Error = 'StudyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_SeriesNumber IS NULL OR p_SeriesNumber = 0) THEN
+        SET v_Error = 'SeriesNumber is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE imaging_series
+        SET
+            StudyId = p_StudyId,
+            SeriesNumber = p_SeriesNumber,
+            Description = p_Description
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingStudiesCreate`(
+    IN p_OrderId BIGINT UNSIGNED,
+    IN p_StudyDate DATETIME,
+    IN p_AccessionNumber VARCHAR(100),
+    IN p_Modality ENUM('XR','CT','MRI','US','PET','NM','MAMMO','DEXA'),
+    IN p_Status ENUM('InProgress','Completed','Finalized'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_OrderId IS NULL OR p_OrderId = 0 THEN
+        SET v_Error = 'OrderId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StudyDate IS NULL THEN
+        SET v_Error = 'StudyDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Modality IS NULL THEN
+        SET v_Error = 'Modality is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO imaging_studies
+        (OrderId, StudyDate, AccessionNumber, Modality, Status, Notes)
+        VALUES
+        (p_OrderId, p_StudyDate, p_AccessionNumber, p_Modality, p_Status, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingStudiesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM imaging_studies
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingStudiesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_studies
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingStudiesListAll`()
+BEGIN
+    SELECT *
+    FROM imaging_studies
+    ORDER BY StudyDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingStudiesListByOrder`(
+    IN p_OrderId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_OrderId IS NULL OR p_OrderId = 0 THEN
+        SET v_Error = 'Invalid OrderId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_studies
+        WHERE OrderId = p_OrderId
+        ORDER BY StudyDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingStudiesListByStatus`(
+    IN p_Status ENUM('InProgress','Completed','Finalized')
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Status IS NULL THEN
+        SET v_Error = 'Invalid Status';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM imaging_studies
+        WHERE Status = p_Status
+        ORDER BY StudyDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingStudiesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM imaging_studies
+    WHERE
+        v_Search IS NULL
+        OR AccessionNumber LIKE v_Search
+        OR Notes LIKE v_Search
+        OR Modality LIKE v_Search
+        OR Status LIKE v_Search
+    ORDER BY StudyDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImagingStudiesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_OrderId BIGINT UNSIGNED,
+    IN p_StudyDate DATETIME,
+    IN p_AccessionNumber VARCHAR(100),
+    IN p_Modality ENUM('XR','CT','MRI','US','PET','NM','MAMMO','DEXA'),
+    IN p_Status ENUM('InProgress','Completed','Finalized'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_OrderId IS NULL OR p_OrderId = 0) THEN
+        SET v_Error = 'OrderId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StudyDate IS NULL THEN
+        SET v_Error = 'StudyDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Modality IS NULL THEN
+        SET v_Error = 'Modality is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE imaging_studies
+        SET
+            OrderId = p_OrderId,
+            StudyDate = p_StudyDate,
+            AccessionNumber = p_AccessionNumber,
+            Modality = p_Modality,
+            Status = p_Status,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `immunization_types` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Manufacturer` varchar(100) DEFAULT NULL,
+  `CVXCode` varchar(10) DEFAULT NULL,
+  `Description` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `immunizations` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `ImmunizationTypeId` bigint(20) unsigned NOT NULL,
+  `DateGiven` date NOT NULL,
+  `DoseNumber` int(10) unsigned DEFAULT NULL,
+  `LotNumber` varchar(50) DEFAULT NULL,
+  `ExpirationDate` date DEFAULT NULL,
+  `Route` varchar(50) DEFAULT NULL,
+  `Site` varchar(50) DEFAULT NULL,
+  `AdministeredBy` varchar(100) DEFAULT NULL,
+  `FacilityId` bigint(20) unsigned DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_Immunizations_PatientId` (`PatientId`),
+  KEY `IX_Immunizations_ImmunizationTypeId` (`ImmunizationTypeId`),
+  KEY `IX_Immunizations_FacilityId` (`FacilityId`),
+  CONSTRAINT `FK_Immunizations_Facilities` FOREIGN KEY (`FacilityId`) REFERENCES `facilities` (`Id`),
+  CONSTRAINT `FK_Immunizations_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Immunizations_Types` FOREIGN KEY (`ImmunizationTypeId`) REFERENCES `immunization_types` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationsCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ImmunizationTypeId BIGINT UNSIGNED,
+    IN p_DateGiven DATE,
+    IN p_DoseNumber INT UNSIGNED,
+    IN p_LotNumber VARCHAR(50),
+    IN p_ExpirationDate DATE,
+    IN p_Route VARCHAR(50),
+    IN p_Site VARCHAR(50),
+    IN p_AdministeredBy VARCHAR(100),
+    IN p_FacilityId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ImmunizationTypeId IS NULL OR p_ImmunizationTypeId = 0) THEN
+        SET v_Error = 'ImmunizationTypeId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DateGiven IS NULL THEN
+        SET v_Error = 'DateGiven is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO immunizations
+        (PatientId, ImmunizationTypeId, DateGiven, DoseNumber, LotNumber,
+         ExpirationDate, Route, Site, AdministeredBy, FacilityId, Notes)
+        VALUES
+        (p_PatientId, p_ImmunizationTypeId, p_DateGiven, p_DoseNumber, p_LotNumber,
+         p_ExpirationDate, p_Route, p_Site, p_AdministeredBy, p_FacilityId, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM immunizations
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM immunizations
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationsListAll`()
+BEGIN
+    SELECT *
+    FROM immunizations
+    ORDER BY DateGiven DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationsListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM immunizations
+        WHERE PatientId = p_PatientId
+        ORDER BY DateGiven DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationsListByType`(
+    IN p_ImmunizationTypeId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_ImmunizationTypeId IS NULL OR p_ImmunizationTypeId = 0 THEN
+        SET v_Error = 'Invalid ImmunizationTypeId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM immunizations
+        WHERE ImmunizationTypeId = p_ImmunizationTypeId
+        ORDER BY DateGiven DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM immunizations
+    WHERE
+        v_Search IS NULL
+        OR Notes LIKE v_Search
+        OR Route LIKE v_Search
+        OR Site LIKE v_Search
+        OR AdministeredBy LIKE v_Search
+        OR LotNumber LIKE v_Search
+    ORDER BY DateGiven DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ImmunizationTypeId BIGINT UNSIGNED,
+    IN p_DateGiven DATE,
+    IN p_DoseNumber INT UNSIGNED,
+    IN p_LotNumber VARCHAR(50),
+    IN p_ExpirationDate DATE,
+    IN p_Route VARCHAR(50),
+    IN p_Site VARCHAR(50),
+    IN p_AdministeredBy VARCHAR(100),
+    IN p_FacilityId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ImmunizationTypeId IS NULL OR p_ImmunizationTypeId = 0) THEN
+        SET v_Error = 'ImmunizationTypeId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DateGiven IS NULL THEN
+        SET v_Error = 'DateGiven is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE immunizations
+        SET
+            PatientId = p_PatientId,
+            ImmunizationTypeId = p_ImmunizationTypeId,
+            DateGiven = p_DateGiven,
+            DoseNumber = p_DoseNumber,
+            LotNumber = p_LotNumber,
+            ExpirationDate = p_ExpirationDate,
+            Route = p_Route,
+            Site = p_Site,
+            AdministeredBy = p_AdministeredBy,
+            FacilityId = p_FacilityId,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationTypesCreate`(
+    IN p_Name VARCHAR(100),
+    IN p_Manufacturer VARCHAR(100),
+    IN p_CVXCode VARCHAR(10),
+    IN p_Description TEXT,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO immunization_types
+        (Name, Manufacturer, CVXCode, Description, Active)
+        VALUES
+        (p_Name, p_Manufacturer, p_CVXCode, p_Description, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationTypesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE immunization_types
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationTypesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM immunization_types
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationTypesList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Manufacturer,
+        CVXCode,
+        Description,
+        Active
+    FROM immunization_types
+    WHERE Active = 1
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationTypesListAll`()
+BEGIN
+    SELECT *
+    FROM immunization_types
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationTypesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM immunization_types
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Manufacturer LIKE v_Search
+        OR CVXCode LIKE v_Search
+        OR Description LIKE v_Search
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationTypesSearchActive`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM immunization_types
+    WHERE
+        Active = 1
+        AND (
+            v_Search IS NULL
+            OR Name LIKE v_Search
+            OR Manufacturer LIKE v_Search
+            OR CVXCode LIKE v_Search
+            OR Description LIKE v_Search
+        )
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ImmunizationTypesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_Manufacturer VARCHAR(100),
+    IN p_CVXCode VARCHAR(10),
+    IN p_Description TEXT,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE immunization_types
+        SET
+            Name = p_Name,
+            Manufacturer = p_Manufacturer,
+            CVXCode = p_CVXCode,
+            Description = p_Description,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `insurance_companies` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Phone` varchar(20) DEFAULT NULL,
+  `Fax` varchar(20) DEFAULT NULL,
+  `AddressId` bigint(20) unsigned DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_InsuranceCompanies_AddressId` (`AddressId`),
+  CONSTRAINT `FK_InsuranceCompanies_Addresses` FOREIGN KEY (`AddressId`) REFERENCES `medical26`.`addresses` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `insurance_plans` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `CompanyId` bigint(20) unsigned NOT NULL,
+  `Name` varchar(100) NOT NULL,
+  `PlanType` enum('PPO','HMO','POS','EPO','Medicare','Medicaid','Other') DEFAULT 'Other',
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`),
+  KEY `IX_InsurancePlans_CompanyId` (`CompanyId`),
+  CONSTRAINT `FK_InsurancePlans_Companies` FOREIGN KEY (`CompanyId`) REFERENCES `insurance_companies` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsuranceCompaniesCreate`(
+    IN p_Name VARCHAR(100),
+    IN p_Phone VARCHAR(20),
+    IN p_Fax VARCHAR(20),
+    IN p_AddressId BIGINT UNSIGNED,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO insurance_companies
+        (Name, Phone, Fax, AddressId, Active)
+        VALUES
+        (p_Name, p_Phone, p_Fax, p_AddressId, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsuranceCompaniesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE insurance_companies
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsuranceCompaniesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM insurance_companies
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsuranceCompaniesList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Phone,
+        Fax,
+        AddressId,
+        Active
+    FROM insurance_companies
+    WHERE Active = 1
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsuranceCompaniesListAll`()
+BEGIN
+    SELECT *
+    FROM insurance_companies
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsuranceCompaniesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM insurance_companies
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Phone LIKE v_Search
+        OR Fax LIKE v_Search
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsuranceCompaniesSearchActive`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM insurance_companies
+    WHERE
+        Active = 1
+        AND (
+            v_Search IS NULL
+            OR Name LIKE v_Search
+            OR Phone LIKE v_Search
+            OR Fax LIKE v_Search
+        )
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsuranceCompaniesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_Phone VARCHAR(20),
+    IN p_Fax VARCHAR(20),
+    IN p_AddressId BIGINT UNSIGNED,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE insurance_companies
+        SET
+            Name = p_Name,
+            Phone = p_Phone,
+            Fax = p_Fax,
+            AddressId = p_AddressId,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsurancePlansCreate`(
+    IN p_CompanyId BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_PlanType ENUM('PPO','HMO','POS','EPO','Medicare','Medicaid','Other'),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_CompanyId IS NULL OR p_CompanyId = 0 THEN
+        SET v_Error = 'CompanyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO insurance_plans
+        (CompanyId, Name, PlanType, Active)
+        VALUES
+        (p_CompanyId, p_Name, p_PlanType, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsurancePlansDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE insurance_plans
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsurancePlansGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM insurance_plans
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsurancePlansList`()
+BEGIN
+    SELECT
+        Id,
+        CompanyId,
+        Name,
+        PlanType,
+        Active
+    FROM insurance_plans
+    WHERE Active = 1
+    ORDER BY CompanyId, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsurancePlansListAll`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        PlanType,
+        PayerId,
+        Active,
+        Created,
+        Updated
+    FROM insurance_plans
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsurancePlansSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM insurance_plans
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR PlanType LIKE v_Search
+    ORDER BY Active DESC, CompanyId, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsurancePlansSearchActive`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM insurance_plans
+    WHERE
+        Active = 1
+        AND (
+            v_Search IS NULL
+            OR Name LIKE v_Search
+            OR PlanType LIKE v_Search
+        )
+    ORDER BY CompanyId, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `InsurancePlansUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_CompanyId BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_PlanType ENUM('PPO','HMO','POS','EPO','Medicare','Medicaid','Other'),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_CompanyId IS NULL OR p_CompanyId = 0) THEN
+        SET v_Error = 'CompanyId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE insurance_plans
+        SET
+            CompanyId = p_CompanyId,
+            Name = p_Name,
+            PlanType = p_PlanType,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `lab_orders` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `DoctorId` bigint(20) unsigned NOT NULL,
+  `FacilityId` bigint(20) unsigned DEFAULT NULL,
+  `LabTestId` bigint(20) unsigned NOT NULL,
+  `OrderDate` datetime NOT NULL,
+  `Status` enum('Ordered','Collected','Completed','Cancelled') NOT NULL DEFAULT 'Ordered',
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_LabOrders_PatientId` (`PatientId`),
+  KEY `IX_LabOrders_DoctorId` (`DoctorId`),
+  KEY `IX_LabOrders_FacilityId` (`FacilityId`),
+  KEY `IX_LabOrders_LabTestId` (`LabTestId`),
+  CONSTRAINT `FK_LabOrders_Doctors` FOREIGN KEY (`DoctorId`) REFERENCES `doctors` (`Id`),
+  CONSTRAINT `FK_LabOrders_Facilities` FOREIGN KEY (`FacilityId`) REFERENCES `facilities` (`Id`),
+  CONSTRAINT `FK_LabOrders_LabTests` FOREIGN KEY (`LabTestId`) REFERENCES `lab_tests` (`Id`),
+  CONSTRAINT `FK_LabOrders_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `lab_results` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `LabOrderId` bigint(20) unsigned NOT NULL,
+  `ComponentName` varchar(100) NOT NULL,
+  `Value` varchar(50) NOT NULL,
+  `Units` varchar(20) DEFAULT NULL,
+  `ReferenceRange` varchar(50) DEFAULT NULL,
+  `Flag` enum('Normal','High','Low','Critical') DEFAULT 'Normal',
+  `ResultDate` datetime NOT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_LabResults_LabOrderId` (`LabOrderId`),
+  CONSTRAINT `FK_LabResults_LabOrders` FOREIGN KEY (`LabOrderId`) REFERENCES `lab_orders` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `lab_tests` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Description` text DEFAULT NULL,
+  `LOINC` varchar(20) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_DoctorId BIGINT UNSIGNED,
+    IN p_FacilityId BIGINT UNSIGNED,
+    IN p_LabTestId BIGINT UNSIGNED,
+    IN p_OrderDate DATETIME,
+    IN p_Status ENUM('Ordered','Collected','Completed','Cancelled'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DoctorId IS NULL OR p_DoctorId = 0) THEN
+        SET v_Error = 'DoctorId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_LabTestId IS NULL OR p_LabTestId = 0) THEN
+        SET v_Error = 'LabTestId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_OrderDate IS NULL THEN
+        SET v_Error = 'OrderDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO lab_orders
+        (PatientId, DoctorId, FacilityId, LabTestId, OrderDate, Status, Notes)
+        VALUES
+        (p_PatientId, p_DoctorId, p_FacilityId, p_LabTestId, p_OrderDate, p_Status, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM lab_orders
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM lab_orders
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersListAll`()
+BEGIN
+    SELECT *
+    FROM lab_orders
+    ORDER BY OrderDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersListByDoctor`(
+    IN p_DoctorId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_DoctorId IS NULL OR p_DoctorId = 0 THEN
+        SET v_Error = 'Invalid DoctorId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM lab_orders
+        WHERE DoctorId = p_DoctorId
+        ORDER BY OrderDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersListByFacility`(
+    IN p_FacilityId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_FacilityId IS NULL OR p_FacilityId = 0 THEN
+        SET v_Error = 'Invalid FacilityId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM lab_orders
+        WHERE FacilityId = p_FacilityId
+        ORDER BY OrderDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM lab_orders
+        WHERE PatientId = p_PatientId
+        ORDER BY OrderDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersListByStatus`(
+    IN p_Status ENUM('Ordered','Collected','Completed','Cancelled')
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Status IS NULL THEN
+        SET v_Error = 'Invalid Status';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM lab_orders
+        WHERE Status = p_Status
+        ORDER BY OrderDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM lab_orders
+    WHERE
+        v_Search IS NULL
+        OR Notes LIKE v_Search
+        OR Status LIKE v_Search
+        OR LabTestId LIKE v_Search
+        OR FacilityId LIKE v_Search
+    ORDER BY OrderDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabOrdersUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_DoctorId BIGINT UNSIGNED,
+    IN p_FacilityId BIGINT UNSIGNED,
+    IN p_LabTestId BIGINT UNSIGNED,
+    IN p_OrderDate DATETIME,
+    IN p_Status ENUM('Ordered','Collected','Completed','Cancelled'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DoctorId IS NULL OR p_DoctorId = 0) THEN
+        SET v_Error = 'DoctorId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_LabTestId IS NULL OR p_LabTestId = 0) THEN
+        SET v_Error = 'LabTestId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_OrderDate IS NULL THEN
+        SET v_Error = 'OrderDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE lab_orders
+        SET
+            PatientId = p_PatientId,
+            DoctorId = p_DoctorId,
+            FacilityId = p_FacilityId,
+            LabTestId = p_LabTestId,
+            OrderDate = p_OrderDate,
+            Status = p_Status,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabResultsCreate`(
+    IN p_LabOrderId BIGINT UNSIGNED,
+    IN p_ComponentName VARCHAR(100),
+    IN p_Value VARCHAR(50),
+    IN p_Units VARCHAR(20),
+    IN p_ReferenceRange VARCHAR(50),
+    IN p_Flag ENUM('Normal','High','Low','Critical'),
+    IN p_ResultDate DATETIME
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_LabOrderId IS NULL OR p_LabOrderId = 0 THEN
+        SET v_Error = 'LabOrderId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ComponentName IS NULL OR p_ComponentName = '') THEN
+        SET v_Error = 'ComponentName is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Value IS NULL OR p_Value = '') THEN
+        SET v_Error = 'Value is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ResultDate IS NULL THEN
+        SET v_Error = 'ResultDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO lab_results
+        (LabOrderId, ComponentName, Value, Units, ReferenceRange, Flag, ResultDate)
+        VALUES
+        (p_LabOrderId, p_ComponentName, p_Value, p_Units, p_ReferenceRange, p_Flag, p_ResultDate);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabResultsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM lab_results
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabResultsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM lab_results
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabResultsListAll`()
+BEGIN
+    SELECT *
+    FROM lab_results
+    ORDER BY ResultDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabResultsListByFlag`(
+    IN p_Flag ENUM('Normal','High','Low','Critical')
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Flag IS NULL THEN
+        SET v_Error = 'Invalid Flag';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM lab_results
+        WHERE Flag = p_Flag
+        ORDER BY ResultDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabResultsListByOrder`(
+    IN p_LabOrderId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_LabOrderId IS NULL OR p_LabOrderId = 0 THEN
+        SET v_Error = 'Invalid LabOrderId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM lab_results
+        WHERE LabOrderId = p_LabOrderId
+        ORDER BY ResultDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabResultsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM lab_results
+    WHERE
+        v_Search IS NULL
+        OR ComponentName LIKE v_Search
+        OR Value LIKE v_Search
+        OR Units LIKE v_Search
+        OR ReferenceRange LIKE v_Search
+        OR Flag LIKE v_Search
+    ORDER BY ResultDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabResultsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_LabOrderId BIGINT UNSIGNED,
+    IN p_ComponentName VARCHAR(100),
+    IN p_Value VARCHAR(50),
+    IN p_Units VARCHAR(20),
+    IN p_ReferenceRange VARCHAR(50),
+    IN p_Flag ENUM('Normal','High','Low','Critical'),
+    IN p_ResultDate DATETIME
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_LabOrderId IS NULL OR p_LabOrderId = 0) THEN
+        SET v_Error = 'LabOrderId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ComponentName IS NULL OR p_ComponentName = '') THEN
+        SET v_Error = 'ComponentName is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Value IS NULL OR p_Value = '') THEN
+        SET v_Error = 'Value is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ResultDate IS NULL THEN
+        SET v_Error = 'ResultDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE lab_results
+        SET
+            LabOrderId = p_LabOrderId,
+            ComponentName = p_ComponentName,
+            Value = p_Value,
+            Units = p_Units,
+            ReferenceRange = p_ReferenceRange,
+            Flag = p_Flag,
+            ResultDate = p_ResultDate
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabTestsCreate`(
+    IN p_Name VARCHAR(100),
+    IN p_Description TEXT,
+    IN p_LOINC VARCHAR(20),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO lab_tests
+        (Name, Description, LOINC, Active)
+        VALUES
+        (p_Name, p_Description, p_LOINC, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabTestsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE lab_tests
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabTestsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM lab_tests
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabTestsList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Description,
+        LOINC,
+        Active
+    FROM lab_tests
+    WHERE Active = 1
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabTestsListAll`()
+BEGIN
+    SELECT *
+    FROM lab_tests
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabTestsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM lab_tests
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Description LIKE v_Search
+        OR LOINC LIKE v_Search
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabTestsSearchActive`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM lab_tests
+    WHERE
+        Active = 1
+        AND (
+            v_Search IS NULL
+            OR Name LIKE v_Search
+            OR Description LIKE v_Search
+            OR LOINC LIKE v_Search
+        )
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LabTestsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_Description TEXT,
+    IN p_LOINC VARCHAR(20),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE lab_tests
+        SET
+            Name = p_Name,
+            Description = p_Description,
+            LOINC = p_LOINC,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `ledger_accounts` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Description` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `ledger_entries` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `AccountId` bigint(20) unsigned NOT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `InsuranceId` bigint(20) unsigned DEFAULT NULL,
+  `EntryDate` datetime NOT NULL,
+  `Amount` decimal(10,2) NOT NULL,
+  `Description` varchar(255) DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_LedgerEntries_PatientId` (`PatientId`),
+  KEY `IX_LedgerEntries_AccountId` (`AccountId`),
+  KEY `IX_LedgerEntries_VisitId` (`VisitId`),
+  KEY `IX_LedgerEntries_InsuranceId` (`InsuranceId`),
+  CONSTRAINT `FK_LedgerEntries_Accounts` FOREIGN KEY (`AccountId`) REFERENCES `ledger_accounts` (`Id`),
+  CONSTRAINT `FK_LedgerEntries_Insurance` FOREIGN KEY (`InsuranceId`) REFERENCES `patient_insurance` (`Id`),
+  CONSTRAINT `FK_LedgerEntries_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_LedgerEntries_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerAccountsCreate`(
+    IN p_Name VARCHAR(100),
+    IN p_Description TEXT,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO ledger_accounts
+        (Name, Description, Active)
+        VALUES
+        (p_Name, p_Description, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerAccountsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE ledger_accounts
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerAccountsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM ledger_accounts
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerAccountsList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Description,
+        Active
+    FROM ledger_accounts
+    WHERE Active = 1
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerAccountsListAll`()
+BEGIN
+    SELECT *
+    FROM ledger_accounts
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerAccountsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM ledger_accounts
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Description LIKE v_Search
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerAccountsSearchActive`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM ledger_accounts
+    WHERE
+        Active = 1
+        AND (
+            v_Search IS NULL
+            OR Name LIKE v_Search
+            OR Description LIKE v_Search
+        )
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerAccountsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_Description TEXT,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE ledger_accounts
+        SET
+            Name = p_Name,
+            Description = p_Description,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_AccountId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_InsuranceId BIGINT UNSIGNED,
+    IN p_EntryDate DATETIME,
+    IN p_Amount DECIMAL(10,2),
+    IN p_Description VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_AccountId IS NULL OR p_AccountId = 0) THEN
+        SET v_Error = 'AccountId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_EntryDate IS NULL THEN
+        SET v_Error = 'EntryDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Amount IS NULL THEN
+        SET v_Error = 'Amount is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO ledger_entries
+        (PatientId, AccountId, VisitId, InsuranceId, EntryDate, Amount, Description)
+        VALUES
+        (p_PatientId, p_AccountId, p_VisitId, p_InsuranceId, p_EntryDate, p_Amount, p_Description);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM ledger_entries
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM ledger_entries
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesListAll`()
+BEGIN
+    SELECT *
+    FROM ledger_entries
+    ORDER BY EntryDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesListByAccount`(
+    IN p_AccountId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_AccountId IS NULL OR p_AccountId = 0 THEN
+        SET v_Error = 'Invalid AccountId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM ledger_entries
+        WHERE AccountId = p_AccountId
+        ORDER BY EntryDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesListByInsurance`(
+    IN p_InsuranceId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_InsuranceId IS NULL OR p_InsuranceId = 0 THEN
+        SET v_Error = 'Invalid InsuranceId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM ledger_entries
+        WHERE InsuranceId = p_InsuranceId
+        ORDER BY EntryDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM ledger_entries
+        WHERE PatientId = p_PatientId
+        ORDER BY EntryDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesListByVisit`(
+    IN p_VisitId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_VisitId IS NULL OR p_VisitId = 0 THEN
+        SET v_Error = 'Invalid VisitId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM ledger_entries
+        WHERE VisitId = p_VisitId
+        ORDER BY EntryDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM ledger_entries
+    WHERE
+        v_Search IS NULL
+        OR Description LIKE v_Search
+        OR Amount LIKE v_Search
+        OR AccountId LIKE v_Search
+        OR InsuranceId LIKE v_Search
+    ORDER BY EntryDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `LedgerEntriesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_AccountId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_InsuranceId BIGINT UNSIGNED,
+    IN p_EntryDate DATETIME,
+    IN p_Amount DECIMAL(10,2),
+    IN p_Description VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_AccountId IS NULL OR p_AccountId = 0) THEN
+        SET v_Error = 'AccountId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_EntryDate IS NULL THEN
+        SET v_Error = 'EntryDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Amount IS NULL THEN
+        SET v_Error = 'Amount is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE ledger_entries
+        SET
+            PatientId = p_PatientId,
+            AccountId = p_AccountId,
+            VisitId = p_VisitId,
+            InsuranceId = p_InsuranceId,
+            EntryDate = p_EntryDate,
+            Amount = p_Amount,
+            Description = p_Description
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `medical_notes` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `ProviderId` bigint(20) unsigned DEFAULT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `NoteType` varchar(50) NOT NULL,
+  `NoteText` text NOT NULL,
+  `Created` datetime NOT NULL DEFAULT current_timestamp(),
+  `Updated` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `fk_mednotes_patient` (`PatientId`),
+  KEY `fk_mednotes_provider` (`ProviderId`),
+  KEY `fk_mednotes_visit` (`VisitId`),
+  CONSTRAINT `fk_mednotes_patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `fk_mednotes_provider` FOREIGN KEY (`ProviderId`) REFERENCES `doctors` (`Id`),
+  CONSTRAINT `fk_mednotes_visit` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicalNotesCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ProviderId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_NoteType VARCHAR(50),
+    IN p_NoteText TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_NoteType IS NULL OR p_NoteType = '') THEN
+        SET v_Error = 'NoteType is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_NoteText IS NULL OR p_NoteText = '') THEN
+        SET v_Error = 'NoteText is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO medical_notes
+        (PatientId, ProviderId, VisitId, NoteType, NoteText)
+        VALUES
+        (p_PatientId, p_ProviderId, p_VisitId, p_NoteType, p_NoteText);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicalNotesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM medical_notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicalNotesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medical_notes
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicalNotesListAll`()
+BEGIN
+    SELECT *
+    FROM medical_notes
+    ORDER BY Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicalNotesListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medical_notes
+        WHERE PatientId = p_PatientId
+        ORDER BY Created DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicalNotesListByProvider`(
+    IN p_ProviderId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_ProviderId IS NULL OR p_ProviderId = 0 THEN
+        SET v_Error = 'Invalid ProviderId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medical_notes
+        WHERE ProviderId = p_ProviderId
+        ORDER BY Created DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicalNotesListByVisit`(
+    IN p_VisitId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_VisitId IS NULL OR p_VisitId = 0 THEN
+        SET v_Error = 'Invalid VisitId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medical_notes
+        WHERE VisitId = p_VisitId
+        ORDER BY Created DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicalNotesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM medical_notes
+    WHERE
+        v_Search IS NULL
+        OR NoteType LIKE v_Search
+        OR NoteText LIKE v_Search
+        OR ProviderId LIKE v_Search
+        OR VisitId LIKE v_Search
+    ORDER BY Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicalNotesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ProviderId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_NoteType VARCHAR(50),
+    IN p_NoteText TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_NoteType IS NULL OR p_NoteType = '') THEN
+        SET v_Error = 'NoteType is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_NoteText IS NULL OR p_NoteText = '') THEN
+        SET v_Error = 'NoteText is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE medical_notes
+        SET
+            PatientId = p_PatientId,
+            ProviderId = p_ProviderId,
+            VisitId = p_VisitId,
+            NoteType = p_NoteType,
+            NoteText = p_NoteText
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `medicare_part_d` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `PlanName` varchar(255) NOT NULL,
+  `PlanId` varchar(50) NOT NULL,
+  `MemberId` varchar(50) NOT NULL,
+  `GroupNumber` varchar(50) DEFAULT NULL,
+  `EffectiveDate` date NOT NULL,
+  `TerminationDate` date DEFAULT NULL,
+  `LISLevel` enum('None','Partial','Full') NOT NULL DEFAULT 'None',
+  `CoveragePhase` enum('Deductible','Initial','Gap','Catastrophic') NOT NULL DEFAULT 'Initial',
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicarePartDCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_PlanName VARCHAR(255),
+    IN p_PlanId VARCHAR(50),
+    IN p_MemberId VARCHAR(50),
+    IN p_GroupNumber VARCHAR(50),
+    IN p_EffectiveDate DATE,
+    IN p_TerminationDate DATE,
+    IN p_LISLevel ENUM('None','Partial','Full'),
+    IN p_CoveragePhase ENUM('Deductible','Initial','Gap','Catastrophic'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PlanName IS NULL OR p_PlanName = '') THEN
+        SET v_Error = 'PlanName is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PlanId IS NULL OR p_PlanId = '') THEN
+        SET v_Error = 'PlanId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MemberId IS NULL OR p_MemberId = '') THEN
+        SET v_Error = 'MemberId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_EffectiveDate IS NULL THEN
+        SET v_Error = 'EffectiveDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO medicare_part_d
+        (PatientId, PlanName, PlanId, MemberId, GroupNumber,
+         EffectiveDate, TerminationDate, LISLevel, CoveragePhase, Notes)
+        VALUES
+        (p_PatientId, p_PlanName, p_PlanId, p_MemberId, p_GroupNumber,
+         p_EffectiveDate, p_TerminationDate, p_LISLevel, p_CoveragePhase, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicarePartDDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM medicare_part_d
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicarePartDGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medicare_part_d
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicarePartDListAll`()
+BEGIN
+    SELECT *
+    FROM medicare_part_d
+    ORDER BY EffectiveDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicarePartDListByCoveragePhase`(
+    IN p_CoveragePhase ENUM('Deductible','Initial','Gap','Catastrophic')
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_CoveragePhase IS NULL THEN
+        SET v_Error = 'Invalid CoveragePhase';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medicare_part_d
+        WHERE CoveragePhase = p_CoveragePhase
+        ORDER BY EffectiveDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicarePartDListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medicare_part_d
+        WHERE PatientId = p_PatientId
+        ORDER BY EffectiveDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicarePartDSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM medicare_part_d
+    WHERE
+        v_Search IS NULL
+        OR PlanName LIKE v_Search
+        OR PlanId LIKE v_Search
+        OR MemberId LIKE v_Search
+        OR GroupNumber LIKE v_Search
+        OR Notes LIKE v_Search
+        OR LISLevel LIKE v_Search
+        OR CoveragePhase LIKE v_Search
+    ORDER BY EffectiveDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicarePartDUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_PlanName VARCHAR(255),
+    IN p_PlanId VARCHAR(50),
+    IN p_MemberId VARCHAR(50),
+    IN p_GroupNumber VARCHAR(50),
+    IN p_EffectiveDate DATE,
+    IN p_TerminationDate DATE,
+    IN p_LISLevel ENUM('None','Partial','Full'),
+    IN p_CoveragePhase ENUM('Deductible','Initial','Gap','Catastrophic'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PlanName IS NULL OR p_PlanName = '') THEN
+        SET v_Error = 'PlanName is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PlanId IS NULL OR p_PlanId = '') THEN
+        SET v_Error = 'PlanId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MemberId IS NULL OR p_MemberId = '') THEN
+        SET v_Error = 'MemberId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_EffectiveDate IS NULL THEN
+        SET v_Error = 'EffectiveDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE medicare_part_d
+        SET
+            PatientId = p_PatientId,
+            PlanName = p_PlanName,
+            PlanId = p_PlanId,
+            MemberId = p_MemberId,
+            GroupNumber = p_GroupNumber,
+            EffectiveDate = p_EffectiveDate,
+            TerminationDate = p_TerminationDate,
+            LISLevel = p_LISLevel,
+            CoveragePhase = p_CoveragePhase,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `medication_administrations` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `MedicationId` bigint(20) unsigned NOT NULL,
+  `AdministeredBy` bigint(20) unsigned NOT NULL,
+  `Dose` varchar(50) NOT NULL,
+  `Route` varchar(50) NOT NULL,
+  `Units` varchar(20) DEFAULT NULL,
+  `TimeGiven` datetime NOT NULL,
+  `PRNReason` varchar(255) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_MedAdmin_PatientId` (`PatientId`),
+  KEY `IX_MedAdmin_MedicationId` (`MedicationId`),
+  KEY `IX_MedAdmin_AdministeredBy` (`AdministeredBy`),
+  CONSTRAINT `FK_MedAdmin_AdministeredBy` FOREIGN KEY (`AdministeredBy`) REFERENCES `users` (`Id`) ON UPDATE CASCADE,
+  CONSTRAINT `FK_MedAdmin_Medication` FOREIGN KEY (`MedicationId`) REFERENCES `medications` (`Id`) ON UPDATE CASCADE,
+  CONSTRAINT `FK_MedAdmin_Patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `medication_details` (
+  `MedicationId` bigint(20) unsigned NOT NULL,
+  `Warnings` text DEFAULT NULL,
+  `Interactions` text DEFAULT NULL,
+  `SideEffects` text DEFAULT NULL,
+  `MissedDose` text DEFAULT NULL,
+  `Overdose` text DEFAULT NULL,
+  PRIMARY KEY (`MedicationId`),
+  CONSTRAINT `FK_MedicationDetails_Medications` FOREIGN KEY (`MedicationId`) REFERENCES `medications` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `medication_history` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `MedicationId` bigint(20) unsigned NOT NULL,
+  `StartDate` date NOT NULL,
+  `EndDate` date DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Source` varchar(50) NOT NULL DEFAULT 'Provider',
+  `EnteredBy` bigint(20) unsigned NOT NULL,
+  `DiscontinuedBy` bigint(20) unsigned DEFAULT NULL,
+  `DiscontinueReason` varchar(255) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_MedHistory_PatientId` (`PatientId`),
+  KEY `IX_MedHistory_MedicationId` (`MedicationId`),
+  KEY `IX_MedHistory_EnteredBy` (`EnteredBy`),
+  KEY `IX_MedHistory_DiscontinuedBy` (`DiscontinuedBy`),
+  CONSTRAINT `FK_MedHistory_DiscontinuedBy` FOREIGN KEY (`DiscontinuedBy`) REFERENCES `users` (`Id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `FK_MedHistory_EnteredBy` FOREIGN KEY (`EnteredBy`) REFERENCES `users` (`Id`) ON UPDATE CASCADE,
+  CONSTRAINT `FK_MedHistory_Medication` FOREIGN KEY (`MedicationId`) REFERENCES `medications` (`Id`) ON UPDATE CASCADE,
+  CONSTRAINT `FK_MedHistory_Patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `medication_intolerances` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `MedicationId` bigint(20) unsigned DEFAULT NULL,
+  `Description` varchar(255) NOT NULL,
+  `Severity` enum('Mild','Moderate','Severe') DEFAULT 'Moderate',
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_MedicationIntolerances_PatientId` (`PatientId`),
+  KEY `IX_MedicationIntolerances_MedicationId` (`MedicationId`),
+  CONSTRAINT `FK_MedicationIntolerances_Medications` FOREIGN KEY (`MedicationId`) REFERENCES `medications` (`Id`),
+  CONSTRAINT `FK_MedicationIntolerances_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationAdministrationsCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_AdministeredBy BIGINT UNSIGNED,
+    IN p_Dose VARCHAR(50),
+    IN p_Route VARCHAR(50),
+    IN p_Units VARCHAR(20),
+    IN p_TimeGiven DATETIME,
+    IN p_PRNReason VARCHAR(255),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MedicationId IS NULL OR p_MedicationId = 0) THEN
+        SET v_Error = 'MedicationId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_AdministeredBy IS NULL OR p_AdministeredBy = 0) THEN
+        SET v_Error = 'AdministeredBy is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Dose IS NULL OR p_Dose = '') THEN
+        SET v_Error = 'Dose is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Route IS NULL OR p_Route = '') THEN
+        SET v_Error = 'Route is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_TimeGiven IS NULL THEN
+        SET v_Error = 'TimeGiven is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO medication_administrations
+        (PatientId, MedicationId, AdministeredBy, Dose, Route, Units, TimeGiven, PRNReason, Notes)
+        VALUES
+        (p_PatientId, p_MedicationId, p_AdministeredBy, p_Dose, p_Route, p_Units, p_TimeGiven, p_PRNReason, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationAdministrationsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM medication_administrations
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationAdministrationsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_administrations
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationAdministrationsListAll`()
+BEGIN
+    SELECT *
+    FROM medication_administrations
+    ORDER BY TimeGiven DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationAdministrationsListByMedication`(
+    IN p_MedicationId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_MedicationId IS NULL OR p_MedicationId = 0 THEN
+        SET v_Error = 'Invalid MedicationId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_administrations
+        WHERE MedicationId = p_MedicationId
+        ORDER BY TimeGiven DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationAdministrationsListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_administrations
+        WHERE PatientId = p_PatientId
+        ORDER BY TimeGiven DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationAdministrationsListByUser`(
+    IN p_AdministeredBy BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_AdministeredBy IS NULL OR p_AdministeredBy = 0 THEN
+        SET v_Error = 'Invalid AdministeredBy';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_administrations
+        WHERE AdministeredBy = p_AdministeredBy
+        ORDER BY TimeGiven DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationAdministrationsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM medication_administrations
+    WHERE
+        v_Search IS NULL
+        OR Dose LIKE v_Search
+        OR Route LIKE v_Search
+        OR Units LIKE v_Search
+        OR PRNReason LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY TimeGiven DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationAdministrationsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_AdministeredBy BIGINT UNSIGNED,
+    IN p_Dose VARCHAR(50),
+    IN p_Route VARCHAR(50),
+    IN p_Units VARCHAR(20),
+    IN p_TimeGiven DATETIME,
+    IN p_PRNReason VARCHAR(255),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MedicationId IS NULL OR p_MedicationId = 0) THEN
+        SET v_Error = 'MedicationId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_AdministeredBy IS NULL OR p_AdministeredBy = 0) THEN
+        SET v_Error = 'AdministeredBy is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Dose IS NULL OR p_Dose = '') THEN
+        SET v_Error = 'Dose is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Route IS NULL OR p_Route = '') THEN
+        SET v_Error = 'Route is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_TimeGiven IS NULL THEN
+        SET v_Error = 'TimeGiven is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE medication_administrations
+        SET
+            PatientId = p_PatientId,
+            MedicationId = p_MedicationId,
+            AdministeredBy = p_AdministeredBy,
+            Dose = p_Dose,
+            Route = p_Route,
+            Units = p_Units,
+            TimeGiven = p_TimeGiven,
+            PRNReason = p_PRNReason,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationDetailsCreate`(
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_Warnings TEXT,
+    IN p_Interactions TEXT,
+    IN p_SideEffects TEXT,
+    IN p_MissedDose TEXT,
+    IN p_Overdose TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+    DECLARE v_Exists INT DEFAULT 0;
+
+    IF p_MedicationId IS NULL OR p_MedicationId = 0 THEN
+        SET v_Error = 'MedicationId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT COUNT(*) INTO v_Exists
+        FROM medication_details
+        WHERE MedicationId = p_MedicationId;
+
+        IF v_Exists > 0 THEN
+            SET v_Error = 'MedicationId already has a details record';
+        END IF;
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO medication_details
+        (MedicationId, Warnings, Interactions, SideEffects, MissedDose, Overdose)
+        VALUES
+        (p_MedicationId, p_Warnings, p_Interactions, p_SideEffects, p_MissedDose, p_Overdose);
+
+        SELECT p_MedicationId AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationDetailsDelete`(
+    IN p_MedicationId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_MedicationId IS NULL OR p_MedicationId = 0 THEN
+        SET v_Error = 'Invalid MedicationId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM medication_details
+        WHERE MedicationId = p_MedicationId;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationDetailsGet`(
+    IN p_MedicationId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_MedicationId IS NULL OR p_MedicationId = 0 THEN
+        SET v_Error = 'Invalid MedicationId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_details
+        WHERE MedicationId = p_MedicationId;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationDetailsListAll`()
+BEGIN
+    SELECT *
+    FROM medication_details
+    ORDER BY MedicationId;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationDetailsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM medication_details
+    WHERE
+        v_Search IS NULL
+        OR Warnings LIKE v_Search
+        OR Interactions LIKE v_Search
+        OR SideEffects LIKE v_Search
+        OR MissedDose LIKE v_Search
+        OR Overdose LIKE v_Search
+    ORDER BY MedicationId;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationDetailsUpdate`(
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_Warnings TEXT,
+    IN p_Interactions TEXT,
+    IN p_SideEffects TEXT,
+    IN p_MissedDose TEXT,
+    IN p_Overdose TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_MedicationId IS NULL OR p_MedicationId = 0 THEN
+        SET v_Error = 'Invalid MedicationId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE medication_details
+        SET
+            Warnings = p_Warnings,
+            Interactions = p_Interactions,
+            SideEffects = p_SideEffects,
+            MissedDose = p_MissedDose,
+            Overdose = p_Overdose
+        WHERE MedicationId = p_MedicationId;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationHistoryCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_StartDate DATE,
+    IN p_EndDate DATE,
+    IN p_Active TINYINT(1),
+    IN p_Source VARCHAR(50),
+    IN p_EnteredBy BIGINT UNSIGNED,
+    IN p_DiscontinuedBy BIGINT UNSIGNED,
+    IN p_DiscontinueReason VARCHAR(255),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MedicationId IS NULL OR p_MedicationId = 0) THEN
+        SET v_Error = 'MedicationId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StartDate IS NULL THEN
+        SET v_Error = 'StartDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_EnteredBy IS NULL OR p_EnteredBy = 0) THEN
+        SET v_Error = 'EnteredBy is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO medication_history
+        (PatientId, MedicationId, StartDate, EndDate, Active, Source, EnteredBy, DiscontinuedBy, DiscontinueReason, Notes)
+        VALUES
+        (p_PatientId, p_MedicationId, p_StartDate, p_EndDate, p_Active, p_Source, p_EnteredBy, p_DiscontinuedBy, p_DiscontinueReason, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationHistoryDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE medication_history
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationHistoryGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_history
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationHistoryListActive`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_history
+        WHERE PatientId = p_PatientId
+          AND Active = 1
+        ORDER BY StartDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationHistoryListAll`()
+BEGIN
+    SELECT *
+    FROM medication_history
+    ORDER BY PatientId, Active DESC, StartDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationHistoryListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_history
+        WHERE PatientId = p_PatientId
+        ORDER BY Active DESC, StartDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationHistorySearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM medication_history
+    WHERE
+        v_Search IS NULL
+        OR Source LIKE v_Search
+        OR DiscontinueReason LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY Active DESC, StartDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationHistoryUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_StartDate DATE,
+    IN p_EndDate DATE,
+    IN p_Active TINYINT(1),
+    IN p_Source VARCHAR(50),
+    IN p_EnteredBy BIGINT UNSIGNED,
+    IN p_DiscontinuedBy BIGINT UNSIGNED,
+    IN p_DiscontinueReason VARCHAR(255),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MedicationId IS NULL OR p_MedicationId = 0) THEN
+        SET v_Error = 'MedicationId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StartDate IS NULL THEN
+        SET v_Error = 'StartDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_EnteredBy IS NULL OR p_EnteredBy = 0) THEN
+        SET v_Error = 'EnteredBy is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE medication_history
+        SET
+            PatientId = p_PatientId,
+            MedicationId = p_MedicationId,
+            StartDate = p_StartDate,
+            EndDate = p_EndDate,
+            Active = p_Active,
+            Source = p_Source,
+            EnteredBy = p_EnteredBy,
+            DiscontinuedBy = p_DiscontinuedBy,
+            DiscontinueReason = p_DiscontinueReason,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationIntolerancesCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_Description VARCHAR(255),
+    IN p_Severity ENUM('Mild','Moderate','Severe'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Description IS NULL OR p_Description = '') THEN
+        SET v_Error = 'Description is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO medication_intolerances
+        (PatientId, MedicationId, Description, Severity, Notes)
+        VALUES
+        (p_PatientId, p_MedicationId, p_Description, p_Severity, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationIntolerancesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM medication_intolerances
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationIntolerancesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_intolerances
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationIntolerancesListAll`()
+BEGIN
+    SELECT *
+    FROM medication_intolerances
+    ORDER BY Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationIntolerancesListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medication_intolerances
+        WHERE PatientId = p_PatientId
+        ORDER BY FIELD(Severity,'Severe','Moderate','Mild'), Created DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationIntolerancesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM medication_intolerances
+    WHERE
+        v_Search IS NULL
+        OR Description LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY FIELD(Severity,'Severe','Moderate','Mild'), Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationIntolerancesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_Description VARCHAR(255),
+    IN p_Severity ENUM('Mild','Moderate','Severe'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Description IS NULL OR p_Description = '') THEN
+        SET v_Error = 'Description is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE medication_intolerances
+        SET
+            PatientId = p_PatientId,
+            MedicationId = p_MedicationId,
+            Description = p_Description,
+            Severity = p_Severity,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `medications` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Strength` varchar(50) DEFAULT NULL,
+  `Form` varchar(50) DEFAULT NULL,
+  `NDC` varchar(20) DEFAULT NULL,
+  `Manufacturer` varchar(100) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationsCreate`(
+    IN p_Name VARCHAR(100),
+    IN p_Strength VARCHAR(50),
+    IN p_Form VARCHAR(50),
+    IN p_NDC VARCHAR(20),
+    IN p_Manufacturer VARCHAR(100),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO medications
+        (Name, Strength, Form, NDC, Manufacturer, Active)
+        VALUES
+        (p_Name, p_Strength, p_Form, p_NDC, p_Manufacturer, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE medications
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM medications
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationsList`()
+BEGIN
+    SELECT
+        Id,
+        Name,
+        Strength,
+        Form,
+        NDC,
+        Manufacturer,
+        Active
+    FROM medications
+    WHERE Active = 1
+    ORDER BY Name, Strength, Form;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationsListAll`()
+BEGIN
+    SELECT *
+    FROM medications
+    ORDER BY Active DESC, Name, Strength, Form;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM medications
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Strength LIKE v_Search
+        OR Form LIKE v_Search
+        OR NDC LIKE v_Search
+        OR Manufacturer LIKE v_Search
+    ORDER BY Active DESC, Name, Strength, Form;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationsSearchActive`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM medications
+    WHERE
+        Active = 1
+        AND (
+            v_Search IS NULL
+            OR Name LIKE v_Search
+            OR Strength LIKE v_Search
+            OR Form LIKE v_Search
+            OR NDC LIKE v_Search
+            OR Manufacturer LIKE v_Search
+        )
+    ORDER BY Name, Strength, Form;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `MedicationsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_Strength VARCHAR(50),
+    IN p_Form VARCHAR(50),
+    IN p_NDC VARCHAR(20),
+    IN p_Manufacturer VARCHAR(100),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE medications
+        SET
+            Name = p_Name,
+            Strength = p_Strength,
+            Form = p_Form,
+            NDC = p_NDC,
+            Manufacturer = p_Manufacturer,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `modifiers` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Modifier` varchar(10) NOT NULL,
+  `Description` varchar(255) NOT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ModifiersCreate`(
+    IN p_Modifier VARCHAR(10),
+    IN p_Description VARCHAR(255),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Modifier IS NULL OR p_Modifier = '' THEN
+        SET v_Error = 'Modifier is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Description IS NULL OR p_Description = '') THEN
+        SET v_Error = 'Description is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO modifiers
+        (Modifier, Description, Active)
+        VALUES
+        (p_Modifier, p_Description, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ModifiersDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE modifiers
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ModifiersGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM modifiers
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ModifiersList`()
+BEGIN
+    SELECT *
+    FROM modifiers
+    WHERE Active = 1
+    ORDER BY Modifier;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ModifiersListAll`()
+BEGIN
+    SELECT *
+    FROM modifiers
+    ORDER BY Active DESC, Modifier;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ModifiersSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM modifiers
+    WHERE
+        v_Search IS NULL
+        OR Modifier LIKE v_Search
+        OR Description LIKE v_Search
+    ORDER BY Active DESC, Modifier;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ModifiersUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Modifier VARCHAR(10),
+    IN p_Description VARCHAR(255),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Modifier IS NULL OR p_Modifier = '') THEN
+        SET v_Error = 'Modifier is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Description IS NULL OR p_Description = '') THEN
+        SET v_Error = 'Description is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE modifiers
+        SET
+            Modifier = p_Modifier,
+            Description = p_Description,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `pacemaker_daily_data` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PacemakerId` bigint(20) unsigned NOT NULL,
+  `RecordedAt` datetime NOT NULL,
+  `BatteryPercent` decimal(5,2) DEFAULT NULL,
+  `PacingPercent` decimal(5,2) DEFAULT NULL,
+  `AtrialEvents` int(10) unsigned DEFAULT NULL,
+  `VentricularEvents` int(10) unsigned DEFAULT NULL,
+  `AFibEpisodes` int(10) unsigned DEFAULT NULL,
+  `PVCs` int(10) unsigned DEFAULT NULL,
+  `LeadImpedance` decimal(6,2) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_PacemakerDailyData_PacemakerId` (`PacemakerId`),
+  CONSTRAINT `FK_PacemakerDailyData_Pacemaker` FOREIGN KEY (`PacemakerId`) REFERENCES `pacemakers` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `pacemaker_transmissions` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PacemakerId` bigint(20) unsigned NOT NULL,
+  `TransmittedAt` datetime NOT NULL,
+  `Status` varchar(50) NOT NULL,
+  `SignalStrength` varchar(50) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_PacemakerTransmissions_PacemakerId` (`PacemakerId`),
+  CONSTRAINT `FK_PacemakerTransmissions_Pacemaker` FOREIGN KEY (`PacemakerId`) REFERENCES `pacemakers` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerDailyDataCreate`(
+    IN p_PacemakerId BIGINT UNSIGNED,
+    IN p_RecordedAt DATETIME,
+    IN p_BatteryPercent DECIMAL(5,2),
+    IN p_PacingPercent DECIMAL(5,2),
+    IN p_AtrialEvents INT UNSIGNED,
+    IN p_VentricularEvents INT UNSIGNED,
+    IN p_AFibEpisodes INT UNSIGNED,
+    IN p_PVCs INT UNSIGNED,
+    IN p_LeadImpedance DECIMAL(6,2),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PacemakerId IS NULL OR p_PacemakerId = 0 THEN
+        SET v_Error = 'PacemakerId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_RecordedAt IS NULL THEN
+        SET v_Error = 'RecordedAt is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO pacemaker_daily_data
+        (PacemakerId, RecordedAt, BatteryPercent, PacingPercent, AtrialEvents, VentricularEvents, AFibEpisodes, PVCs, LeadImpedance, Notes)
+        VALUES
+        (p_PacemakerId, p_RecordedAt, p_BatteryPercent, p_PacingPercent, p_AtrialEvents, p_VentricularEvents, p_AFibEpisodes, p_PVCs, p_LeadImpedance, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerDailyDataDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM pacemaker_daily_data
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerDailyDataGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM pacemaker_daily_data
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerDailyDataListAll`()
+BEGIN
+    SELECT *
+    FROM pacemaker_daily_data
+    ORDER BY RecordedAt DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerDailyDataListByPacemaker`(
+    IN p_PacemakerId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PacemakerId IS NULL OR p_PacemakerId = 0 THEN
+        SET v_Error = 'Invalid PacemakerId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM pacemaker_daily_data
+        WHERE PacemakerId = p_PacemakerId
+        ORDER BY RecordedAt DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerDailyDataSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM pacemaker_daily_data
+    WHERE
+        v_Search IS NULL
+        OR Notes LIKE v_Search
+    ORDER BY RecordedAt DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerDailyDataUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PacemakerId BIGINT UNSIGNED,
+    IN p_RecordedAt DATETIME,
+    IN p_BatteryPercent DECIMAL(5,2),
+    IN p_PacingPercent DECIMAL(5,2),
+    IN p_AtrialEvents INT UNSIGNED,
+    IN p_VentricularEvents INT UNSIGNED,
+    IN p_AFibEpisodes INT UNSIGNED,
+    IN p_PVCs INT UNSIGNED,
+    IN p_LeadImpedance DECIMAL(6,2),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PacemakerId IS NULL OR p_PacemakerId = 0) THEN
+        SET v_Error = 'PacemakerId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_RecordedAt IS NULL THEN
+        SET v_Error = 'RecordedAt is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE pacemaker_daily_data
+        SET
+            PacemakerId = p_PacemakerId,
+            RecordedAt = p_RecordedAt,
+            BatteryPercent = p_BatteryPercent,
+            PacingPercent = p_PacingPercent,
+            AtrialEvents = p_AtrialEvents,
+            VentricularEvents = p_VentricularEvents,
+            AFibEpisodes = p_AFibEpisodes,
+            PVCs = p_PVCs,
+            LeadImpedance = p_LeadImpedance,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `pacemakers` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `Manufacturer` varchar(100) NOT NULL,
+  `Model` varchar(100) NOT NULL,
+  `SerialNumber` varchar(100) NOT NULL,
+  `ImplantDate` date NOT NULL,
+  `ImplantedBy` bigint(20) unsigned DEFAULT NULL,
+  `DeviceType` varchar(50) NOT NULL,
+  `BatteryStatus` varchar(50) DEFAULT NULL,
+  `LastCheck` datetime DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_Pacemakers_PatientId` (`PatientId`),
+  KEY `IX_Pacemakers_ImplantedBy` (`ImplantedBy`),
+  CONSTRAINT `FK_Pacemakers_ImplantedBy` FOREIGN KEY (`ImplantedBy`) REFERENCES `doctors` (`Id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `FK_Pacemakers_Patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerTransmissionsCreate`(
+    IN p_PacemakerId BIGINT UNSIGNED,
+    IN p_TransmittedAt DATETIME,
+    IN p_Status VARCHAR(50),
+    IN p_SignalStrength VARCHAR(50),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PacemakerId IS NULL OR p_PacemakerId = 0 THEN
+        SET v_Error = 'PacemakerId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_TransmittedAt IS NULL THEN
+        SET v_Error = 'TransmittedAt is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Status IS NULL OR p_Status = '') THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO pacemaker_transmissions
+        (PacemakerId, TransmittedAt, Status, SignalStrength, Notes)
+        VALUES
+        (p_PacemakerId, p_TransmittedAt, p_Status, p_SignalStrength, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerTransmissionsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM pacemaker_transmissions
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerTransmissionsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM pacemaker_transmissions
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerTransmissionsListAll`()
+BEGIN
+    SELECT *
+    FROM pacemaker_transmissions
+    ORDER BY TransmittedAt DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerTransmissionsListByPacemaker`(
+    IN p_PacemakerId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PacemakerId IS NULL OR p_PacemakerId = 0 THEN
+        SET v_Error = 'Invalid PacemakerId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM pacemaker_transmissions
+        WHERE PacemakerId = p_PacemakerId
+        ORDER BY TransmittedAt DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerTransmissionsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM pacemaker_transmissions
+    WHERE
+        v_Search IS NULL
+        OR Status LIKE v_Search
+        OR SignalStrength LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY TransmittedAt DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PacemakerTransmissionsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PacemakerId BIGINT UNSIGNED,
+    IN p_TransmittedAt DATETIME,
+    IN p_Status VARCHAR(50),
+    IN p_SignalStrength VARCHAR(50),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PacemakerId IS NULL OR p_PacemakerId = 0) THEN
+        SET v_Error = 'PacemakerId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_TransmittedAt IS NULL THEN
+        SET v_Error = 'TransmittedAt is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Status IS NULL OR p_Status = '') THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE pacemaker_transmissions
+        SET
+            PacemakerId = p_PacemakerId,
+            TransmittedAt = p_TransmittedAt,
+            Status = p_Status,
+            SignalStrength = p_SignalStrength,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `patient_conditions` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `ConditionTypeId` bigint(20) unsigned NOT NULL,
+  `OnsetDate` date DEFAULT NULL,
+  `ResolvedDate` date DEFAULT NULL,
+  `Status` enum('Active','Resolved','Inactive','Remission') NOT NULL DEFAULT 'Active',
+  `Severity` enum('Mild','Moderate','Severe','Critical') DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_PatientConditions_PatientId` (`PatientId`),
+  KEY `IX_PatientConditions_ConditionTypeId` (`ConditionTypeId`),
+  CONSTRAINT `FK_PatientConditions_ConditionType` FOREIGN KEY (`ConditionTypeId`) REFERENCES `condition_types` (`Id`) ON UPDATE CASCADE,
+  CONSTRAINT `FK_PatientConditions_Patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `patient_employer` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `EmployerId` bigint(20) unsigned NOT NULL,
+  `JobTitle` varchar(255) DEFAULT NULL,
+  `Department` varchar(255) DEFAULT NULL,
+  `StartDate` date NOT NULL,
+  `EndDate` date DEFAULT NULL,
+  `IsPrimary` tinyint(1) NOT NULL DEFAULT 1,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_PatientEmployer_PatientId` (`PatientId`),
+  KEY `IX_PatientEmployer_EmployerId` (`EmployerId`),
+  CONSTRAINT `FK_PatientEmployer_Employer` FOREIGN KEY (`EmployerId`) REFERENCES `employers` (`Id`) ON UPDATE CASCADE,
+  CONSTRAINT `FK_PatientEmployer_Patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `patient_guarantor` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `GuarantorId` bigint(20) unsigned NOT NULL,
+  `Relationship` varchar(100) DEFAULT NULL,
+  `StartDate` date NOT NULL,
+  `EndDate` date DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_PatientGuarantor_PatientId` (`PatientId`),
+  KEY `IX_PatientGuarantor_GuarantorId` (`GuarantorId`),
+  CONSTRAINT `FK_PatientGuarantor_Guarantors` FOREIGN KEY (`GuarantorId`) REFERENCES `guarantors` (`Id`),
+  CONSTRAINT `FK_PatientGuarantor_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `patient_insurance` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `PlanId` bigint(20) unsigned NOT NULL,
+  `PolicyNumber` varchar(50) NOT NULL,
+  `GroupNumber` varchar(50) DEFAULT NULL,
+  `Relationship` enum('Self','Spouse','Child','Other') DEFAULT 'Self',
+  `EffectiveDate` date DEFAULT NULL,
+  `EndDate` date DEFAULT NULL,
+  `Copay` decimal(10,2) DEFAULT NULL,
+  `Deductible` decimal(10,2) DEFAULT NULL,
+  `IsPrimary` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_PatientInsurance_PatientId` (`PatientId`),
+  KEY `IX_PatientInsurance_PlanId` (`PlanId`),
+  CONSTRAINT `FK_PatientInsurance_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_PatientInsurance_Plans` FOREIGN KEY (`PlanId`) REFERENCES `insurance_plans` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `patient_primary_emergency_contact_view` (
+	`Id` BIGINT(20) UNSIGNED NOT NULL,
+	`PatientId` BIGINT(20) UNSIGNED NOT NULL,
+	`FirstName` VARCHAR(1) NOT NULL COLLATE 'utf8mb4_general_ci',
+	`LastName` VARCHAR(1) NOT NULL COLLATE 'utf8mb4_general_ci',
+	`Relationship` VARCHAR(1) NOT NULL COLLATE 'utf8mb4_general_ci',
+	`Priority` INT(10) UNSIGNED NOT NULL,
+	`PhonePrimary` VARCHAR(1) NOT NULL COLLATE 'utf8mb4_general_ci',
+	`PhoneSecondary` VARCHAR(1) NULL COLLATE 'utf8mb4_general_ci',
+	`Email` VARCHAR(1) NULL COLLATE 'utf8mb4_general_ci',
+	`AddressLine1` VARCHAR(1) NULL COLLATE 'utf8mb4_general_ci',
+	`AddressLine2` VARCHAR(1) NULL COLLATE 'utf8mb4_general_ci',
+	`City` VARCHAR(1) NULL COLLATE 'utf8mb4_general_ci',
+	`State` VARCHAR(1) NULL COLLATE 'utf8mb4_general_ci',
+	`PostalCode` VARCHAR(1) NULL COLLATE 'utf8mb4_general_ci',
+	`Notes` TEXT NULL COLLATE 'utf8mb4_general_ci'
+);
+
+CREATE TABLE IF NOT EXISTS `patient_tests` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `TestTypeId` bigint(20) unsigned NOT NULL,
+  `OrderedDate` date DEFAULT NULL,
+  `PerformedDate` date DEFAULT NULL,
+  `ResultSummary` varchar(500) DEFAULT NULL,
+  `ResultDetails` text DEFAULT NULL,
+  `OrderingProviderId` bigint(20) unsigned DEFAULT NULL,
+  `PerformingFacilityId` bigint(20) unsigned DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_PatientTests_PatientId` (`PatientId`),
+  KEY `IX_PatientTests_TestTypeId` (`TestTypeId`),
+  CONSTRAINT `FK_PatientTests_Patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `FK_PatientTests_TestType` FOREIGN KEY (`TestTypeId`) REFERENCES `test_types` (`Id`) ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientConditionsCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ConditionTypeId BIGINT UNSIGNED,
+    IN p_OnsetDate DATE,
+    IN p_ResolvedDate DATE,
+    IN p_Status ENUM('Active','Resolved','Inactive','Remission'),
+    IN p_Severity ENUM('Mild','Moderate','Severe','Critical'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ConditionTypeId IS NULL OR p_ConditionTypeId = 0) THEN
+        SET v_Error = 'ConditionTypeId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Status IS NULL THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO patient_conditions
+        (PatientId, ConditionTypeId, OnsetDate, ResolvedDate, Status, Severity, Notes)
+        VALUES
+        (p_PatientId, p_ConditionTypeId, p_OnsetDate, p_ResolvedDate, p_Status, p_Severity, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientConditionsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM patient_conditions
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientConditionsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM patient_conditions
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientConditionsListAll`()
+BEGIN
+    SELECT *
+    FROM patient_conditions
+    ORDER BY PatientId, Status, Severity, OnsetDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientConditionsListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM patient_conditions
+        WHERE PatientId = p_PatientId
+        ORDER BY Status, Severity, OnsetDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientConditionsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM patient_conditions
+    WHERE
+        v_Search IS NULL
+        OR Notes LIKE v_Search
+    ORDER BY PatientId, Status, Severity, OnsetDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientConditionsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ConditionTypeId BIGINT UNSIGNED,
+    IN p_OnsetDate DATE,
+    IN p_ResolvedDate DATE,
+    IN p_Status ENUM('Active','Resolved','Inactive','Remission'),
+    IN p_Severity ENUM('Mild','Moderate','Severe','Critical'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ConditionTypeId IS NULL OR p_ConditionTypeId = 0) THEN
+        SET v_Error = 'ConditionTypeId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Status IS NULL THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE patient_conditions
+        SET
+            PatientId = p_PatientId,
+            ConditionTypeId = p_ConditionTypeId,
+            OnsetDate = p_OnsetDate,
+            ResolvedDate = p_ResolvedDate,
+            Status = p_Status,
+            Severity = p_Severity,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientEmployerCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_EmployerId BIGINT UNSIGNED,
+    IN p_JobTitle VARCHAR(255),
+    IN p_Department VARCHAR(255),
+    IN p_StartDate DATE,
+    IN p_EndDate DATE,
+    IN p_IsPrimary TINYINT(1),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_EmployerId IS NULL OR p_EmployerId = 0) THEN
+        SET v_Error = 'EmployerId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StartDate IS NULL THEN
+        SET v_Error = 'StartDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO patient_employer
+        (PatientId, EmployerId, JobTitle, Department, StartDate, EndDate, IsPrimary, Notes)
+        VALUES
+        (p_PatientId, p_EmployerId, p_JobTitle, p_Department, p_StartDate, p_EndDate, p_IsPrimary, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientEmployerDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM patient_employer
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientEmployerGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM patient_employer
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientEmployerListAll`()
+BEGIN
+    SELECT *
+    FROM patient_employer
+    ORDER BY PatientId, IsPrimary DESC, StartDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientEmployerListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM patient_employer
+        WHERE PatientId = p_PatientId
+        ORDER BY IsPrimary DESC, StartDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientEmployerSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM patient_employer
+    WHERE
+        v_Search IS NULL
+        OR JobTitle LIKE v_Search
+        OR Department LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY PatientId, IsPrimary DESC, StartDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientEmployerUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_EmployerId BIGINT UNSIGNED,
+    IN p_JobTitle VARCHAR(255),
+    IN p_Department VARCHAR(255),
+    IN p_StartDate DATE,
+    IN p_EndDate DATE,
+    IN p_IsPrimary TINYINT(1),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_EmployerId IS NULL OR p_EmployerId = 0) THEN
+        SET v_Error = 'EmployerId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StartDate IS NULL THEN
+        SET v_Error = 'StartDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE patient_employer
+        SET
+            PatientId = p_PatientId,
+            EmployerId = p_EmployerId,
+            JobTitle = p_JobTitle,
+            Department = p_Department,
+            StartDate = p_StartDate,
+            EndDate = p_EndDate,
+            IsPrimary = p_IsPrimary,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientGuarantorCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_GuarantorId BIGINT UNSIGNED,
+    IN p_Relationship VARCHAR(100),
+    IN p_StartDate DATE,
+    IN p_EndDate DATE,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_GuarantorId IS NULL OR p_GuarantorId = 0) THEN
+        SET v_Error = 'GuarantorId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StartDate IS NULL THEN
+        SET v_Error = 'StartDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO patient_guarantor
+        (PatientId, GuarantorId, Relationship, StartDate, EndDate, Notes)
+        VALUES
+        (p_PatientId, p_GuarantorId, p_Relationship, p_StartDate, p_EndDate, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientGuarantorDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM patient_guarantor
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientGuarantorGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM patient_guarantor
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientGuarantorListAll`()
+BEGIN
+    SELECT *
+    FROM patient_guarantor
+    ORDER BY PatientId, StartDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientGuarantorListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM patient_guarantor
+        WHERE PatientId = p_PatientId
+        ORDER BY StartDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientGuarantorSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM patient_guarantor
+    WHERE
+        v_Search IS NULL
+        OR Relationship LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY PatientId, StartDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientGuarantorUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_GuarantorId BIGINT UNSIGNED,
+    IN p_Relationship VARCHAR(100),
+    IN p_StartDate DATE,
+    IN p_EndDate DATE,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_GuarantorId IS NULL OR p_GuarantorId = 0) THEN
+        SET v_Error = 'GuarantorId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StartDate IS NULL THEN
+        SET v_Error = 'StartDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE patient_guarantor
+        SET
+            PatientId = p_PatientId,
+            GuarantorId = p_GuarantorId,
+            Relationship = p_Relationship,
+            StartDate = p_StartDate,
+            EndDate = p_EndDate,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientInsuranceCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_PlanId BIGINT UNSIGNED,
+    IN p_PolicyNumber VARCHAR(50),
+    IN p_GroupNumber VARCHAR(50),
+    IN p_Relationship ENUM('Self','Spouse','Child','Other'),
+    IN p_EffectiveDate DATE,
+    IN p_EndDate DATE,
+    IN p_Copay DECIMAL(10,2),
+    IN p_Deductible DECIMAL(10,2),
+    IN p_IsPrimary TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PlanId IS NULL OR p_PlanId = 0) THEN
+        SET v_Error = 'PlanId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PolicyNumber IS NULL OR p_PolicyNumber = '') THEN
+        SET v_Error = 'PolicyNumber is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO patient_insurance
+        (PatientId, PlanId, PolicyNumber, GroupNumber, Relationship,
+         EffectiveDate, EndDate, Copay, Deductible, IsPrimary)
+        VALUES
+        (p_PatientId, p_PlanId, p_PolicyNumber, p_GroupNumber, p_Relationship,
+         p_EffectiveDate, p_EndDate, p_Copay, p_Deductible, p_IsPrimary);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientInsuranceDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM patient_insurance
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientInsuranceGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM patient_insurance
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientInsuranceListAll`()
+BEGIN
+    SELECT *
+    FROM patient_insurance
+    ORDER BY PatientId, IsPrimary DESC, EffectiveDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientInsuranceListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM patient_insurance
+        WHERE PatientId = p_PatientId
+        ORDER BY IsPrimary DESC, EffectiveDate DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientInsuranceSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM patient_insurance
+    WHERE
+        v_Search IS NULL
+        OR PolicyNumber LIKE v_Search
+        OR GroupNumber LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY PatientId, IsPrimary DESC, EffectiveDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientInsuranceUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_PlanId BIGINT UNSIGNED,
+    IN p_PolicyNumber VARCHAR(50),
+    IN p_GroupNumber VARCHAR(50),
+    IN p_Relationship ENUM('Self','Spouse','Child','Other'),
+    IN p_EffectiveDate DATE,
+    IN p_EndDate DATE,
+    IN p_Copay DECIMAL(10,2),
+    IN p_Deductuctible DECIMAL(10,2),
+    IN p_IsPrimary TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PlanId IS NULL OR p_PlanId = 0) THEN
+        SET v_Error = 'PlanId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PolicyNumber IS NULL OR p_PolicyNumber = '') THEN
+        SET v_Error = 'PolicyNumber is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE patient_insurance
+        SET
+            PatientId = p_PatientId,
+            PlanId = p_PlanId,
+            PolicyNumber = p_PolicyNumber,
+            GroupNumber = p_GroupNumber,
+            Relationship = p_Relationship,
+            EffectiveDate = p_EffectiveDate,
+            EndDate = p_EndDate,
+            Copay = p_Copay,
+            Deductible = p_Deductuctible,
+            IsPrimary = p_IsPrimary
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `patients` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `FirstName` varchar(50) NOT NULL,
+  `LastName` varchar(50) NOT NULL,
+  `MiddleName` varchar(50) DEFAULT NULL,
+  `DOB` date NOT NULL,
+  `Sex` enum('M','F','O') NOT NULL,
+  `Phone` varchar(20) DEFAULT NULL,
+  `Email` varchar(100) DEFAULT NULL,
+  `AddressId` bigint(20) unsigned DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_Patients_AddressId` (`AddressId`),
+  CONSTRAINT `FK_Patients_Addresses` FOREIGN KEY (`AddressId`) REFERENCES `medical26`.`addresses` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientsCreate`(
+    IN p_FirstName VARCHAR(50),
+    IN p_LastName VARCHAR(50),
+    IN p_MiddleName VARCHAR(50),
+    IN p_DOB DATE,
+    IN p_Sex ENUM('M','F','O'),
+    IN p_Phone VARCHAR(20),
+    IN p_Email VARCHAR(100),
+    IN p_AddressId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_FirstName IS NULL OR p_FirstName = '' THEN
+        SET v_Error = 'FirstName is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_LastName IS NULL OR p_LastName = '') THEN
+        SET v_Error = 'LastName is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DOB IS NULL THEN
+        SET v_Error = 'DOB is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Sex IS NULL THEN
+        SET v_Error = 'Sex is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO patients
+        (FirstName, LastName, MiddleName, DOB, Sex, Phone, Email, AddressId)
+        VALUES
+        (p_FirstName, p_LastName, p_MiddleName, p_DOB, p_Sex, p_Phone, p_Email, p_AddressId);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE patients
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM patients
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientsListActive`()
+BEGIN
+    SELECT *
+    FROM patients
+    WHERE Active = 1
+    ORDER BY LastName, FirstName, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientsListAll`()
+BEGIN
+    SELECT *
+    FROM patients
+    ORDER BY LastName, FirstName, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM patients
+    WHERE
+        v_Search IS NULL
+        OR FirstName LIKE v_Search
+        OR LastName LIKE v_Search
+        OR MiddleName LIKE v_Search
+        OR Email LIKE v_Search
+        OR Phone LIKE v_Search
+    ORDER BY LastName, FirstName, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_FirstName VARCHAR(50),
+    IN p_LastName VARCHAR(50),
+    IN p_MiddleName VARCHAR(50),
+    IN p_DOB DATE,
+    IN p_Sex ENUM('M','F','O'),
+    IN p_Phone VARCHAR(20),
+    IN p_Email VARCHAR(100),
+    IN p_AddressId BIGINT UNSIGNED,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FirstName IS NULL OR p_FirstName = '') THEN
+        SET v_Error = 'FirstName is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_LastName IS NULL OR p_LastName = '') THEN
+        SET v_Error = 'LastName is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DOB IS NULL THEN
+        SET v_Error = 'DOB is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Sex IS NULL THEN
+        SET v_Error = 'Sex is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE patients
+        SET
+            FirstName = p_FirstName,
+            LastName = p_LastName,
+            MiddleName = p_MiddleName,
+            DOB = p_DOB,
+            Sex = p_Sex,
+            Phone = p_Phone,
+            Email = p_Email,
+            AddressId = p_AddressId,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientTestsCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_TestTypeId BIGINT UNSIGNED,
+    IN p_OrderedDate DATE,
+    IN p_PerformedDate DATE,
+    IN p_ResultSummary VARCHAR(500),
+    IN p_ResultDetails TEXT,
+    IN p_OrderingProviderId BIGINT UNSIGNED,
+    IN p_PerformingFacilityId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_TestTypeId IS NULL OR p_TestTypeId = 0) THEN
+        SET v_Error = 'TestTypeId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO patient_tests
+        (PatientId, TestTypeId, OrderedDate, PerformedDate,
+         ResultSummary, ResultDetails, OrderingProviderId,
+         PerformingFacilityId, Notes)
+        VALUES
+        (p_PatientId, p_TestTypeId, p_OrderedDate, p_PerformedDate,
+         p_ResultSummary, p_ResultDetails, p_OrderingProviderId,
+         p_PerformingFacilityId, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientTestsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM patient_tests WHERE Id = p_Id;
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientTestsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT * FROM patient_tests WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientTestsListAll`()
+BEGIN
+    SELECT *
+    FROM patient_tests
+    ORDER BY PatientId, PerformedDate DESC, OrderedDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientTestsListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SELECT 'Invalid PatientId' AS Error;
+    ELSE
+        SELECT *
+        FROM patient_tests
+        WHERE PatientId = p_PatientId
+        ORDER BY PerformedDate DESC, OrderedDate DESC, Id DESC;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientTestsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM patient_tests
+    WHERE
+        v_Search IS NULL
+        OR ResultSummary LIKE v_Search
+        OR ResultDetails LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY PerformedDate DESC, OrderedDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PatientTestsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_TestTypeId BIGINT UNSIGNED,
+    IN p_OrderedDate DATE,
+    IN p_PerformedDate DATE,
+    IN p_ResultSummary VARCHAR(500),
+    IN p_ResultDetails TEXT,
+    IN p_OrderingProviderId BIGINT UNSIGNED,
+    IN p_PerformingFacilityId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_TestTypeId IS NULL OR p_TestTypeId = 0) THEN
+        SET v_Error = 'TestTypeId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE patient_tests
+        SET
+            PatientId = p_PatientId,
+            TestTypeId = p_TestTypeId,
+            OrderedDate = p_OrderedDate,
+            PerformedDate = p_PerformedDate,
+            ResultSummary = p_ResultSummary,
+            ResultDetails = p_ResultDetails,
+            OrderingProviderId = p_OrderingProviderId,
+            PerformingFacilityId = p_PerformingFacilityId,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `payment_plan_installments` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PaymentPlanId` bigint(20) unsigned NOT NULL,
+  `DueDate` date NOT NULL,
+  `AmountDue` decimal(10,2) NOT NULL,
+  `AmountPaid` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `Status` enum('Pending','Paid','Partial','Missed') NOT NULL DEFAULT 'Pending',
+  PRIMARY KEY (`Id`),
+  KEY `IX_PaymentPlanInstallments_PlanId` (`PaymentPlanId`),
+  CONSTRAINT `FK_PaymentPlanInstallments_PaymentPlan` FOREIGN KEY (`PaymentPlanId`) REFERENCES `payment_plans` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `FK_PaymentPlanInstallments_PaymentPlans` FOREIGN KEY (`PaymentPlanId`) REFERENCES `payment_plans` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `payment_plan_payments` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `InstallmentId` bigint(20) unsigned NOT NULL,
+  `PaymentId` bigint(20) unsigned NOT NULL,
+  `AppliedAmount` decimal(10,2) NOT NULL,
+  `AppliedDate` datetime NOT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_PaymentPlanPayments_InstallmentId` (`InstallmentId`),
+  KEY `IX_PaymentPlanPayments_PaymentId` (`PaymentId`),
+  CONSTRAINT `FK_PaymentPlanPayments_Installments` FOREIGN KEY (`InstallmentId`) REFERENCES `payment_plan_installments` (`Id`),
+  CONSTRAINT `FK_PaymentPlanPayments_Payments` FOREIGN KEY (`PaymentId`) REFERENCES `payments` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `payment_plans` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `PlanStartDate` date NOT NULL,
+  `PlanEndDate` date DEFAULT NULL,
+  `OriginalBalance` decimal(10,2) NOT NULL,
+  `RemainingBalance` decimal(10,2) NOT NULL,
+  `InstallmentAmount` decimal(10,2) NOT NULL,
+  `Frequency` enum('Weekly','BiWeekly','Monthly') NOT NULL DEFAULT 'Monthly',
+  `Status` enum('Active','Completed','Defaulted','Cancelled') NOT NULL DEFAULT 'Active',
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_PaymentPlans_PatientId` (`PatientId`),
+  CONSTRAINT `FK_PaymentPlans_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanInstallmentsCreate`(
+    IN p_PaymentPlanId BIGINT UNSIGNED,
+    IN p_DueDate DATE,
+    IN p_AmountDue DECIMAL(10,2),
+    IN p_AmountPaid DECIMAL(10,2),
+    IN p_Status ENUM('Pending','Paid','Partial','Missed')
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PaymentPlanId IS NULL OR p_PaymentPlanId = 0 THEN
+        SET v_Error = 'PaymentPlanId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DueDate IS NULL THEN
+        SET v_Error = 'DueDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_AmountDue IS NULL THEN
+        SET v_Error = 'AmountDue is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Status IS NULL THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO payment_plan_installments
+        (PaymentPlanId, DueDate, AmountDue, AmountPaid, Status)
+        VALUES
+        (p_PaymentPlanId, p_DueDate, p_AmountDue, p_AmountPaid, p_Status);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanInstallmentsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM payment_plan_installments
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanInstallmentsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM payment_plan_installments
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanInstallmentsListAll`()
+BEGIN
+    SELECT *
+    FROM payment_plan_installments
+    ORDER BY PaymentPlanId, DueDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanInstallmentsListByPaymentPlanId`(
+    IN p_PaymentPlanId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PaymentPlanId IS NULL OR p_PaymentPlanId = 0 THEN
+        SELECT 'Invalid PaymentPlanId' AS Error;
+    ELSE
+        SELECT *
+        FROM payment_plan_installments
+        WHERE PaymentPlanId = p_PaymentPlanId
+        ORDER BY DueDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanInstallmentsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM payment_plan_installments
+    WHERE
+        v_Search IS NULL
+        OR Status LIKE v_Search
+        OR AmountDue LIKE v_Search
+        OR AmountPaid LIKE v_Search
+    ORDER BY PaymentPlanId, DueDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanInstallmentsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PaymentPlanId BIGINT UNSIGNED,
+    IN p_DueDate DATE,
+    IN p_AmountDue DECIMAL(10,2),
+    IN p_AmountPaid DECIMAL(10,2),
+    IN p_Status ENUM('Pending','Paid','Partial','Missed')
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PaymentPlanId IS NULL OR p_PaymentPlanId = 0) THEN
+        SET v_Error = 'PaymentPlanId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DueDate IS NULL THEN
+        SET v_Error = 'DueDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_AmountDue IS NULL THEN
+        SET v_Error = 'AmountDue is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Status IS NULL THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE payment_plan_installments
+        SET
+            PaymentPlanId = p_PaymentPlanId,
+            DueDate = p_DueDate,
+            AmountDue = p_AmountDue,
+            AmountPaid = p_AmountPaid,
+            Status = p_Status
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanPaymentsCreate`(
+    IN p_InstallmentId BIGINT UNSIGNED,
+    IN p_PaymentId BIGINT UNSIGNED,
+    IN p_AppliedAmount DECIMAL(10,2),
+    IN p_AppliedDate DATETIME
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_InstallmentId IS NULL OR p_InstallmentId = 0 THEN
+        SET v_Error = 'InstallmentId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PaymentId IS NULL OR p_PaymentId = 0) THEN
+        SET v_Error = 'PaymentId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_AppliedAmount IS NULL THEN
+        SET v_Error = 'AppliedAmount is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_AppliedDate IS NULL THEN
+        SET v_Error = 'AppliedDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO payment_plan_payments
+        (InstallmentId, PaymentId, AppliedAmount, AppliedDate)
+        VALUES
+        (p_InstallmentId, p_PaymentId, p_AppliedAmount, p_AppliedDate);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanPaymentsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM payment_plan_payments
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanPaymentsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM payment_plan_payments
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanPaymentsListAll`()
+BEGIN
+    SELECT *
+    FROM payment_plan_payments
+    ORDER BY InstallmentId, PaymentId, AppliedDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanPaymentsListByInstallmentId`(
+    IN p_InstallmentId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_InstallmentId IS NULL OR p_InstallmentId = 0 THEN
+        SELECT 'Invalid InstallmentId' AS Error;
+    ELSE
+        SELECT *
+        FROM payment_plan_payments
+        WHERE InstallmentId = p_InstallmentId
+        ORDER BY AppliedDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanPaymentsListByPaymentId`(
+    IN p_PaymentId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PaymentId IS NULL OR p_PaymentId = 0 THEN
+        SELECT 'Invalid PaymentId' AS Error;
+    ELSE
+        SELECT *
+        FROM payment_plan_payments
+        WHERE PaymentId = p_PaymentId
+        ORDER BY AppliedDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanPaymentsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM payment_plan_payments
+    WHERE
+        v_Search IS NULL
+        OR AppliedAmount LIKE v_Search
+        OR AppliedDate LIKE v_Search
+    ORDER BY InstallmentId, PaymentId, AppliedDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlanPaymentsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_InstallmentId BIGINT UNSIGNED,
+    IN p_PaymentId BIGINT UNSIGNED,
+    IN p_AppliedAmount DECIMAL(10,2),
+    IN p_AppliedDate DATETIME
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_InstallmentId IS NULL OR p_InstallmentId = 0) THEN
+        SET v_Error = 'InstallmentId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PaymentId IS NULL OR p_PaymentId = 0) THEN
+        SET v_Error = 'PaymentId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_AppliedAmount IS NULL THEN
+        SET v_Error = 'AppliedAmount is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_AppliedDate IS NULL THEN
+        SET v_Error = 'AppliedDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE payment_plan_payments
+        SET
+            InstallmentId = p_InstallmentId,
+            PaymentId = p_PaymentId,
+            AppliedAmount = p_AppliedAmount,
+            AppliedDate = p_AppliedDate
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlansCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_PlanStartDate DATE,
+    IN p_PlanEndDate DATE,
+    IN p_OriginalBalance DECIMAL(10,2),
+    IN p_RemainingBalance DECIMAL(10,2),
+    IN p_InstallmentAmount DECIMAL(10,2),
+    IN p_Frequency ENUM('Weekly','BiWeekly','Monthly'),
+    IN p_Status ENUM('Active','Completed','Defaulted','Cancelled'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PlanStartDate IS NULL THEN
+        SET v_Error = 'PlanStartDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_OriginalBalance IS NULL THEN
+        SET v_Error = 'OriginalBalance is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_RemainingBalance IS NULL THEN
+        SET v_Error = 'RemainingBalance is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_InstallmentAmount IS NULL THEN
+        SET v_Error = 'InstallmentAmount is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Frequency IS NULL THEN
+        SET v_Error = 'Frequency is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Status IS NULL THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO payment_plans
+        (PatientId, PlanStartDate, PlanEndDate, OriginalBalance, RemainingBalance,
+         InstallmentAmount, Frequency, Status, Notes)
+        VALUES
+        (p_PatientId, p_PlanStartDate, p_PlanEndDate, p_OriginalBalance, p_RemainingBalance,
+         p_InstallmentAmount, p_Frequency, p_Status, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlansDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM payment_plans
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlansGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM payment_plans
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlansListAll`()
+BEGIN
+    SELECT *
+    FROM payment_plans
+    ORDER BY PatientId, PlanStartDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlansListByPatientId`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SELECT 'Invalid PatientId' AS Error;
+    ELSE
+        SELECT *
+        FROM payment_plans
+        WHERE PatientId = p_PatientId
+        ORDER BY PlanStartDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlansSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM payment_plans
+    WHERE
+        v_Search IS NULL
+        OR Status LIKE v_Search
+        OR Frequency LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY PatientId, PlanStartDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentPlansUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_PlanStartDate DATE,
+    IN p_PlanEndDate DATE,
+    IN p_OriginalBalance DECIMAL(10,2),
+    IN p_RemainingBalance DECIMAL(10,2),
+    IN p_InstallmentAmount DECIMAL(10,2),
+    IN p_Frequency ENUM('Weekly','BiWeekly','Monthly'),
+    IN p_Status ENUM('Active','Completed','Defaulted','Cancelled'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PlanStartDate IS NULL THEN
+        SET v_Error = 'PlanStartDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_OriginalBalance IS NULL THEN
+        SET v_Error = 'OriginalBalance is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_RemainingBalance IS NULL THEN
+        SET v_Error = 'RemainingBalance is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_InstallmentAmount IS NULL THEN
+        SET v_Error = 'InstallmentAmount is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Frequency IS NULL THEN
+        SET v_Error = 'Frequency is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Status IS NULL THEN
+        SET v_Error = 'Status is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE payment_plans
+        SET
+            PatientId = p_PatientId,
+            PlanStartDate = p_PlanStartDate,
+            PlanEndDate = p_PlanEndDate,
+            OriginalBalance = p_OriginalBalance,
+            RemainingBalance = p_RemainingBalance,
+            InstallmentAmount = p_InstallmentAmount,
+            Frequency = p_Frequency,
+            Status = p_Status,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `payments` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `ChargeId` bigint(20) unsigned DEFAULT NULL,
+  `Source` enum('Patient','Insurance') NOT NULL,
+  `PaymentDate` datetime NOT NULL,
+  `Amount` decimal(10,2) NOT NULL,
+  `ReferenceNumber` varchar(50) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Payments_PatientId` (`PatientId`),
+  KEY `IX_Payments_ChargeId` (`ChargeId`),
+  CONSTRAINT `FK_Payments_Charges` FOREIGN KEY (`ChargeId`) REFERENCES `charges` (`Id`),
+  CONSTRAINT `FK_Payments_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentsCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ChargeId BIGINT UNSIGNED,
+    IN p_Source ENUM('Patient','Insurance'),
+    IN p_PaymentDate DATETIME,
+    IN p_Amount DECIMAL(10,2),
+    IN p_ReferenceNumber VARCHAR(50),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Source IS NULL THEN
+        SET v_Error = 'Source is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PaymentDate IS NULL THEN
+        SET v_Error = 'PaymentDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Amount IS NULL THEN
+        SET v_Error = 'Amount is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO payments
+        (PatientId, ChargeId, Source, PaymentDate, Amount, ReferenceNumber, Notes)
+        VALUES
+        (p_PatientId, p_ChargeId, p_Source, p_PaymentDate, p_Amount, p_ReferenceNumber, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM payments
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM payments
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentsListAll`()
+BEGIN
+    SELECT *
+    FROM payments
+    ORDER BY PatientId, PaymentDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentsListByChargeId`(
+    IN p_ChargeId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_ChargeId IS NULL OR p_ChargeId = 0 THEN
+        SELECT 'Invalid ChargeId' AS Error;
+    ELSE
+        SELECT *
+        FROM payments
+        WHERE ChargeId = p_ChargeId
+        ORDER BY PaymentDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentsListByPatientId`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SELECT 'Invalid PatientId' AS Error;
+    ELSE
+        SELECT *
+        FROM payments
+        WHERE PatientId = p_PatientId
+        ORDER BY PaymentDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM payments
+    WHERE
+        v_Search IS NULL
+        OR Source LIKE v_Search
+        OR ReferenceNumber LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY PatientId, PaymentDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PaymentsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ChargeId BIGINT UNSIGNED,
+    IN p_Source ENUM('Patient','Insurance'),
+    IN p_PaymentDate DATETIME,
+    IN p_Amount DECIMAL(10,2),
+    IN p_ReferenceNumber VARCHAR(50),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Source IS NULL THEN
+        SET v_Error = 'Source is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PaymentDate IS NULL THEN
+        SET v_Error = 'PaymentDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Amount IS NULL THEN
+        SET v_Error = 'Amount is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE payments
+        SET
+            PatientId       = p_PatientId,
+            ChargeId        = p_ChargeId,
+            Source          = p_Source,
+            PaymentDate     = p_PaymentDate,
+            Amount          = p_Amount,
+            ReferenceNumber = p_ReferenceNumber,
+            Notes           = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `permissions` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(150) NOT NULL,
+  `Description` varchar(255) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `UX_Permissions_Name` (`Name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PermissionsCreate`(
+    IN p_Name VARCHAR(150),
+    IN p_Description VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO permissions
+        (Name, Description, Active)
+        VALUES
+        (p_Name, p_Description, 1);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PermissionsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        UPDATE permissions
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PermissionsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM permissions
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PermissionsListActive`()
+BEGIN
+    SELECT *
+    FROM permissions
+    WHERE Active = 1
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PermissionsListAll`()
+BEGIN
+    SELECT *
+    FROM permissions
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PermissionsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM permissions
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Description LIKE v_Search
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PermissionsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(150),
+    IN p_Description VARCHAR(255),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Active IS NULL THEN
+        SET v_Error = 'Active flag is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE permissions
+        SET
+            Name = p_Name,
+            Description = p_Description,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `pharmacies` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `AddressId` bigint(20) unsigned DEFAULT NULL,
+  `Phone` varchar(20) DEFAULT NULL,
+  `Fax` varchar(20) DEFAULT NULL,
+  `NPI` varchar(20) DEFAULT NULL,
+  `NCPDP` varchar(20) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_Pharmacies_AddressId` (`AddressId`),
+  CONSTRAINT `FK_Pharmacies_Addresses` FOREIGN KEY (`AddressId`) REFERENCES `medical26`.`addresses` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmaciesCreate`(
+    IN p_Name VARCHAR(100),
+    IN p_AddressId BIGINT UNSIGNED,
+    IN p_Phone VARCHAR(20),
+    IN p_Fax VARCHAR(20),
+    IN p_NPI VARCHAR(20),
+    IN p_NCPDP VARCHAR(20)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO pharmacies
+        (Name, AddressId, Phone, Fax, NPI, NCPDP, Active)
+        VALUES
+        (p_Name, p_AddressId, p_Phone, p_Fax, p_NPI, p_NCPDP, 1);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmaciesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        UPDATE pharmacies
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmaciesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacies
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmaciesListActive`()
+BEGIN
+    SELECT *
+    FROM pharmacies
+    WHERE Active = 1
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmaciesListAll`()
+BEGIN
+    SELECT *
+    FROM pharmacies
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmaciesListByAddressId`(
+    IN p_AddressId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_AddressId IS NULL OR p_AddressId = 0 THEN
+        SELECT 'Invalid AddressId' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacies
+        WHERE AddressId = p_AddressId
+        ORDER BY Name, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmaciesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM pharmacies
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Phone LIKE v_Search
+        OR Fax LIKE v_Search
+        OR NPI LIKE v_Search
+        OR NCPDP LIKE v_Search
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmaciesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_AddressId BIGINT UNSIGNED,
+    IN p_Phone VARCHAR(20),
+    IN p_Fax VARCHAR(20),
+    IN p_NPI VARCHAR(20),
+    IN p_NCPDP VARCHAR(20),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Active IS NULL THEN
+        SET v_Error = 'Active flag is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE pharmacies
+        SET
+            Name = p_Name,
+            AddressId = p_AddressId,
+            Phone = p_Phone,
+            Fax = p_Fax,
+            NPI = p_NPI,
+            NCPDP = p_NCPDP,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `pharmacy_claims` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `MedicarePartDId` bigint(20) unsigned DEFAULT NULL,
+  `PrescriptionId` bigint(20) unsigned DEFAULT NULL,
+  `NDC` varchar(20) NOT NULL,
+  `DrugName` varchar(255) NOT NULL,
+  `Quantity` decimal(10,2) NOT NULL,
+  `DaysSupply` int(10) unsigned NOT NULL,
+  `FillNumber` int(10) unsigned NOT NULL DEFAULT 0,
+  `ClaimDate` datetime NOT NULL,
+  `AdjudicationStatus` enum('Paid','Rejected','Reversed') NOT NULL,
+  `PatientPay` decimal(10,2) NOT NULL,
+  `PlanPay` decimal(10,2) NOT NULL,
+  `PharmacyPay` decimal(10,2) NOT NULL,
+  `RejectCode` varchar(10) DEFAULT NULL,
+  `CoveragePhase` enum('Deductible','Initial','Gap','Catastrophic') NOT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `pharmacy_discount_claims` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `PrescriptionId` bigint(20) unsigned DEFAULT NULL,
+  `DiscountCardId` bigint(20) unsigned NOT NULL,
+  `NDC` varchar(20) NOT NULL,
+  `DrugName` varchar(255) NOT NULL,
+  `Quantity` decimal(10,2) NOT NULL,
+  `DaysSupply` int(10) unsigned NOT NULL,
+  `ClaimDate` datetime NOT NULL,
+  `DiscountPrice` decimal(10,2) NOT NULL,
+  `PharmacyReimbursement` decimal(10,2) DEFAULT NULL,
+  `PBMFee` decimal(10,2) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyClaimsCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_MedicarePartDId BIGINT UNSIGNED,
+    IN p_PrescriptionId BIGINT UNSIGNED,
+    IN p_NDC VARCHAR(20),
+    IN p_DrugName VARCHAR(255),
+    IN p_Quantity DECIMAL(10,2),
+    IN p_DaysSupply INT UNSIGNED,
+    IN p_FillNumber INT UNSIGNED,
+    IN p_ClaimDate DATETIME,
+    IN p_AdjudicationStatus ENUM('Paid','Rejected','Reversed'),
+    IN p_PatientPay DECIMAL(10,2),
+    IN p_PlanPay DECIMAL(10,2),
+    IN p_PharmacyPay DECIMAL(10,2),
+    IN p_RejectCode VARCHAR(10),
+    IN p_CoveragePhase ENUM('Deductible','Initial','Gap','Catastrophic'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_NDC IS NULL OR p_NDC = '') THEN
+        SET v_Error = 'NDC is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DrugName IS NULL OR p_DrugName = '') THEN
+        SET v_Error = 'DrugName is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Quantity IS NULL THEN
+        SET v_Error = 'Quantity is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DaysSupply IS NULL THEN
+        SET v_Error = 'DaysSupply is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_FillNumber IS NULL THEN
+        SET v_Error = 'FillNumber is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ClaimDate IS NULL THEN
+        SET v_Error = 'ClaimDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_AdjudicationStatus IS NULL THEN
+        SET v_Error = 'AdjudicationStatus is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PatientPay IS NULL THEN
+        SET v_Error = 'PatientPay is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PlanPay IS NULL THEN
+        SET v_Error = 'PlanPay is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PharmacyPay IS NULL THEN
+        SET v_Error = 'PharmacyPay is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_CoveragePhase IS NULL THEN
+        SET v_Error = 'CoveragePhase is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO pharmacy_claims
+        (PatientId, MedicarePartDId, PrescriptionId, NDC, DrugName, Quantity,
+         DaysSupply, FillNumber, ClaimDate, AdjudicationStatus, PatientPay,
+         PlanPay, PharmacyPay, RejectCode, CoveragePhase, Notes)
+        VALUES
+        (p_PatientId, p_MedicarePartDId, p_PrescriptionId, p_NDC, p_DrugName,
+         p_Quantity, p_DaysSupply, p_FillNumber, p_ClaimDate, p_AdjudicationStatus,
+         p_PatientPay, p_PlanPay, p_PharmacyPay, p_RejectCode, p_CoveragePhase,
+         p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyClaimsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM pharmacy_claims
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyClaimsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacy_claims
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyClaimsListAll`()
+BEGIN
+    SELECT *
+    FROM pharmacy_claims
+    ORDER BY PatientId, ClaimDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyClaimsListByMedicarePartDId`(
+    IN p_MedicarePartDId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_MedicarePartDId IS NULL OR p_MedicarePartDId = 0 THEN
+        SELECT 'Invalid MedicarePartDId' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacy_claims
+        WHERE MedicarePartDId = p_MedicarePartDId
+        ORDER BY ClaimDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyClaimsListByPatientId`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SELECT 'Invalid PatientId' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacy_claims
+        WHERE PatientId = p_PatientId
+        ORDER BY ClaimDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyClaimsListByPrescriptionId`(
+    IN p_PrescriptionId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PrescriptionId IS NULL OR p_PrescriptionId = 0 THEN
+        SELECT 'Invalid PrescriptionId' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacy_claims
+        WHERE PrescriptionId = p_PrescriptionId
+        ORDER BY ClaimDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyClaimsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM pharmacy_claims
+    WHERE
+        v_Search IS NULL
+        OR NDC LIKE v_Search
+        OR DrugName LIKE v_Search
+        OR RejectCode LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY PatientId, ClaimDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyClaimsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_MedicarePartDId BIGINT UNSIGNED,
+    IN p_PrescriptionId BIGINT UNSIGNED,
+    IN p_NDC VARCHAR(20),
+    IN p_DrugName VARCHAR(255),
+    IN p_Quantity DECIMAL(10,2),
+    IN p_DaysSupply INT UNSIGNED,
+    IN p_FillNumber INT UNSIGNED,
+    IN p_ClaimDate DATETIME,
+    IN p_AdjudicationStatus ENUM('Paid','Rejected','Reversed'),
+    IN p_PatientPay DECIMAL(10,2),
+    IN p_PlanPay DECIMAL(10,2),
+    IN p_PharmacyPay DECIMAL(10,2),
+    IN p_RejectCode VARCHAR(10),
+    IN p_CoveragePhase ENUM('Deductible','Initial','Gap','Catastrophic'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_NDC IS NULL OR p_NDC = '') THEN
+        SET v_Error = 'NNDC is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DrugName IS NULL OR p_DrugName = '') THEN
+        SET v_Error = 'DrugName is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Quantity IS NULL THEN
+        SET v_Error = 'Quantity is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DaysSupply IS NULL THEN
+        SET v_Error = 'DaysSupply is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_FillNumber IS NULL THEN
+        SET v_Error = 'FillNumber is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ClaimDate IS NULL THEN
+        SET v_Error = 'ClaimDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_AdjudicationStatus IS NULL THEN
+        SET v_Error = 'AdjudicationStatus is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PatientPay IS NULL THEN
+        SET v_Error = 'PatientPay is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PlanPay IS NULL THEN
+        SET v_Error = 'PlanPay is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PharmacyPay IS NULL THEN
+        SET v_Error = 'PharmacyPay is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_CoveragePhase IS NULL THEN
+        SET v_Error = 'CoveragePhase is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE pharmacy_claims
+        SET
+            PatientId = p_PatientId,
+            MedicarePartDId = p_MedicarePartDId,
+            PrescriptionId = p_PrescriptionId,
+            NDC = p_NDC,
+            DrugName = p_DrugName,
+            Quantity = p_Quantity,
+            DaysSupply = p_DaysSupply,
+            FillNumber = p_FillNumber,
+            ClaimDate = p_ClaimDate,
+            AdjudicationStatus = p_AdjudicationStatus,
+            PatientPay = p_PatientPay,
+            PlanPay = p_PlanPay,
+            PharmacyPay = p_PharmacyPay,
+            RejectCode = p_RejectCode,
+            CoveragePhase = p_CoveragePhase,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyDiscountClaimsCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_PrescriptionId BIGINT UNSIGNED,
+    IN p_DiscountCardId BIGINT UNSIGNED,
+    IN p_NDC VARCHAR(20),
+    IN p_DrugName VARCHAR(255),
+    IN p_Quantity DECIMAL(10,2),
+    IN p_DaysSupply INT UNSIGNED,
+    IN p_ClaimDate DATETIME,
+    IN p_DiscountPrice DECIMAL(10,2),
+    IN p_PharmacyReimbursement DECIMAL(10,2),
+    IN p_PBMFee DECIMAL(10,2),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DiscountCardId IS NULL OR p_DiscountCardId = 0) THEN
+        SET v_Error = 'DiscountCardId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_NDC IS NULL OR p_NDC = '') THEN
+        SET v_Error = 'NDC is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DrugName IS NULL OR p_DrugName = '') THEN
+        SET v_Error = 'DrugName is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Quantity IS NULL THEN
+        SET v_Error = 'Quantity is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DaysSupply IS NULL THEN
+        SET v_Error = 'DaysSupply is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ClaimDate IS NULL THEN
+        SET v_Error = 'ClaimDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DiscountPrice IS NULL THEN
+        SET v_Error = 'DiscountPrice is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO pharmacy_discount_claims
+        (PatientId, PrescriptionId, DiscountCardId, NDC, DrugName, Quantity,
+         DaysSupply, ClaimDate, DiscountPrice, PharmacyReimbursement, PBMFee, Notes)
+        VALUES
+        (p_PatientId, p_PrescriptionId, p_DiscountCardId, p_NDC, p_DrugName,
+         p_Quantity, p_DaysSupply, p_ClaimDate, p_DiscountPrice,
+         p_PharmacyReimbursement, p_PBMFee, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyDiscountClaimsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM pharmacy_discount_claims
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyDiscountClaimsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacy_discount_claims
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyDiscountClaimsListAll`()
+BEGIN
+    SELECT *
+    FROM pharmacy_discount_claims
+    ORDER BY PatientId, ClaimDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyDiscountClaimsListByDiscountCardId`(
+    IN p_DiscountCardId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_DiscountCardId IS NULL OR p_DiscountCardId = 0 THEN
+        SELECT 'Invalid DiscountCardId' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacy_discount_claims
+        WHERE DiscountCardId = p_DiscountCardId
+        ORDER BY ClaimDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyDiscountClaimsListByPatientId`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SELECT 'Invalid PatientId' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacy_discount_claims
+        WHERE PatientId = p_PatientId
+        ORDER BY ClaimDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyDiscountClaimsListByPrescriptionId`(
+    IN p_PrescriptionId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PrescriptionId IS NULL OR p_PrescriptionId = 0 THEN
+        SELECT 'Invalid PrescriptionId' AS Error;
+    ELSE
+        SELECT *
+        FROM pharmacy_discount_claims
+        WHERE PrescriptionId = p_PrescriptionId
+        ORDER BY ClaimDate, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyDiscountClaimsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM pharmacy_discount_claims
+    WHERE
+        v_Search IS NULL
+        OR NDC LIKE v_Search
+        OR DrugName LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY PatientId, ClaimDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PharmacyDiscountClaimsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_PrescriptionId BIGINT UNSIGNED,
+    IN p_DiscountCardId BIGINT UNSIGNED,
+    IN p_NDC VARCHAR(20),
+    IN p_DrugName VARCHAR(255),
+    IN p_Quantity DECIMAL(10,2),
+    IN p_DaysSupply INT UNSIGNED,
+    IN p_ClaimDate DATETIME,
+    IN p_DiscountPrice DECIMAL(10,2),
+    IN p_PharmacyReimbursement DECIMAL(10,2),
+    IN p_PBMFee DECIMAL(10,2),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DiscountCardId IS NULL OR p_DiscountCardId = 0) THEN
+        SET v_Error = 'DiscountCardId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_NDC IS NULL OR p_NDC = '') THEN
+        SET v_Error = 'NDC is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DrugName IS NULL OR p_DrugName = '') THEN
+        SET v_Error = 'DrugName is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Quantity IS NULL THEN
+        SET v_Error = 'Quantity is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DaysSupply IS NULL THEN
+        SET v_Error = 'DaysSupply is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ClaimDate IS NULL THEN
+        SET v_Error = 'ClaimDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DiscountPrice IS NULL THEN
+        SET v_Error = 'DiscountPrice is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE pharmacy_discount_claims
+        SET
+            PatientId = p_PatientId,
+            PrescriptionId = p_PrescriptionId,
+            DiscountCardId = p_DiscountCardId,
+            NDC = p_NDC,
+            DrugName = p_DrugName,
+            Quantity = p_Quantity,
+            DaysSupply = p_DaysSupply,
+            ClaimDate = p_ClaimDate,
+            DiscountPrice = p_DiscountPrice,
+            PharmacyReimbursement = p_PharmacyReimbursement,
+            PBMFee = p_PBMFee,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `portal_activity_log` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PortalUserId` bigint(20) unsigned NOT NULL,
+  `ActivityType` varchar(100) NOT NULL,
+  `ActivityDetail` text DEFAULT NULL,
+  `IpAddress` varchar(45) DEFAULT NULL,
+  `UserAgent` varchar(255) DEFAULT NULL,
+  `PerformedBy` bigint(20) unsigned DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_PortalActivityLog_PortalUserId` (`PortalUserId`),
+  KEY `IX_PortalActivityLog_PerformedBy` (`PerformedBy`),
+  CONSTRAINT `FK_PortalActivityLog_PerformedBy` FOREIGN KEY (`PerformedBy`) REFERENCES `users` (`Id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `FK_PortalActivityLog_PortalUser` FOREIGN KEY (`PortalUserId`) REFERENCES `portal_users` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `portal_documents` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PortalUserId` bigint(20) unsigned NOT NULL,
+  `PatientId` bigint(20) unsigned DEFAULT NULL,
+  `CategoryId` bigint(20) unsigned DEFAULT NULL,
+  `FileName` varchar(255) NOT NULL,
+  `FilePath` varchar(500) NOT NULL,
+  `MimeType` varchar(100) NOT NULL,
+  `FileSize` bigint(20) unsigned NOT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_PortalDocuments_PortalUserId` (`PortalUserId`),
+  KEY `IX_PortalDocuments_PatientId` (`PatientId`),
+  KEY `IX_PortalDocuments_CategoryId` (`CategoryId`),
+  CONSTRAINT `FK_PortalDocuments_Category` FOREIGN KEY (`CategoryId`) REFERENCES `document_categories` (`Id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `FK_PortalDocuments_Patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `FK_PortalDocuments_PortalUser` FOREIGN KEY (`PortalUserId`) REFERENCES `portal_users` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `portal_messages` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `SenderId` bigint(20) unsigned NOT NULL,
+  `ReceiverId` bigint(20) unsigned NOT NULL,
+  `Subject` varchar(200) NOT NULL,
+  `MessageBody` text NOT NULL,
+  `ReadFlag` tinyint(1) NOT NULL DEFAULT 0,
+  `Created` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `fk_portalmessages_receiver` (`ReceiverId`),
+  KEY `fk_portalmessages_sender` (`SenderId`),
+  CONSTRAINT `fk_portalmessages_receiver` FOREIGN KEY (`ReceiverId`) REFERENCES `portal_users` (`Id`),
+  CONSTRAINT `fk_portalmessages_sender` FOREIGN KEY (`SenderId`) REFERENCES `portal_users` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `portal_users` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned DEFAULT NULL,
+  `StaffId` bigint(20) unsigned DEFAULT NULL,
+  `Username` varchar(100) NOT NULL,
+  `PasswordHash` varchar(255) NOT NULL,
+  `Role` varchar(50) NOT NULL,
+  `LastLogin` datetime DEFAULT NULL,
+  `Created` datetime NOT NULL DEFAULT current_timestamp(),
+  `Updated` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `fk_portalusers_patient` (`PatientId`),
+  KEY `fk_portalusers_staff` (`StaffId`),
+  CONSTRAINT `fk_portalusers_patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `fk_portalusers_staff` FOREIGN KEY (`StaffId`) REFERENCES `staff` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalActivityLogCreate`(
+    IN p_PortalUserId BIGINT UNSIGNED,
+    IN p_ActivityType VARCHAR(100),
+    IN p_ActivityDetail TEXT,
+    IN p_IpAddress VARCHAR(45),
+    IN p_UserAgent VARCHAR(255),
+    IN p_PerformedBy BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PortalUserId IS NULL OR p_PortalUserId = 0 THEN
+        SET v_Error = 'PortalUserId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ActivityType IS NULL OR p_ActivityType = '') THEN
+        SET v_Error = 'ActivityType is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO portal_activity_log
+        (PortalUserId, ActivityType, ActivityDetail, IpAddress, UserAgent, PerformedBy)
+        VALUES
+        (p_PortalUserId, p_ActivityType, p_ActivityDetail, p_IpAddress, p_UserAgent, p_PerformedBy);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalActivityLogGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM portal_activity_log
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalActivityLogListAll`()
+BEGIN
+    SELECT *
+    FROM portal_activity_log
+    ORDER BY Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalActivityLogListByPortalUser`(
+    IN p_PortalUserId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PortalUserId IS NULL OR p_PortalUserId = 0 THEN
+        SET v_Error = 'Invalid PortalUserId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM portal_activity_log
+        WHERE PortalUserId = p_PortalUserId
+        ORDER BY Created DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalActivityLogListByStaff`(
+    IN p_PerformedBy BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PerformedBy IS NULL OR p_PerformedBy = 0 THEN
+        SET v_Error = 'Invalid PerformedBy';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM portal_activity_log
+        WHERE PerformedBy = p_PerformedBy
+        ORDER BY Created DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalActivityLogSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM portal_activity_log
+    WHERE
+        v_Search IS NULL
+        OR ActivityType LIKE v_Search
+        OR ActivityDetail LIKE v_Search
+        OR IpAddress LIKE v_Search
+        OR UserAgent LIKE v_Search
+    ORDER BY Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalDocumentsCreate`(
+    IN p_PortalUserId BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_CategoryId BIGINT UNSIGNED,
+    IN p_FileName VARCHAR(255),
+    IN p_FilePath VARCHAR(500),
+    IN p_MimeType VARCHAR(100),
+    IN p_FileSize BIGINT UNSIGNED,
+    IN p_Active TINYINT(1),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PortalUserId IS NULL OR p_PortalUserId = 0 THEN
+        SET v_Error = 'PortalUserId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FileName IS NULL OR p_FileName = '') THEN
+        SET v_Error = 'FileName is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FilePath IS NULL OR p_FilePath = '') THEN
+        SET v_Error = 'FilePath is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MimeType IS NULL OR p_MimeType = '') THEN
+        SET v_Error = 'MimeType is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FileSize IS NULL OR p_FileSize = 0) THEN
+        SET v_Error = 'FileSize is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO portal_documents
+        (PortalUserId, PatientId, CategoryId, FileName, FilePath, MimeType, FileSize, Active, Notes)
+        VALUES
+        (p_PortalUserId, p_PatientId, p_CategoryId, p_FileName, p_FilePath, p_MimeType, p_FileSize, p_Active, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalDocumentsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE portal_documents
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalDocumentsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM portal_documents
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalDocumentsListAll`()
+BEGIN
+    SELECT *
+    FROM portal_documents
+    ORDER BY Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalDocumentsListByPatient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'Invalid PatientId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM portal_documents
+        WHERE PatientId = p_PatientId
+        ORDER BY Created DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalDocumentsListByPortalUser`(
+    IN p_PortalUserId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PortalUserId IS NULL OR p_PortalUserId = 0 THEN
+        SET v_Error = 'Invalid PortalUserId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM portal_documents
+        WHERE PortalUserId = p_PortalUserId
+        ORDER BY Created DESC, Id DESC;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalDocumentsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM portal_documents
+    WHERE
+        v_Search IS NULL
+        OR FileName LIKE v_Search
+        OR MimeType LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalDocumentsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PortalUserId BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_CategoryId BIGINT UNSIGNED,
+    IN p_FileName VARCHAR(255),
+    IN p_FilePath VARCHAR(500),
+    IN p_MimeType VARCHAR(100),
+    IN p_FileSize BIGINT UNSIGNED,
+    IN p_Active TINYINT(1),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PortalUserId IS NULL OR p_PortalUserId = 0) THEN
+        SET v_Error = 'PortalUserId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FileName IS NULL OR p_FileName = '') THEN
+        SET v_Error = 'FileName is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FilePath IS NULL OR p_FilePath = '') THEN
+        SET v_Error = 'FilePath is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MimeType IS NULL OR p_MimeType = '') THEN
+        SET v_Error = 'MimeType is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_FileSize IS NULL OR p_FileSize = 0) THEN
+        SET v_Error = 'FileSize is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE portal_documents
+        SET
+            PortalUserId = p_PortalUserId,
+            PatientId = p_PatientId,
+            CategoryId = p_CategoryId,
+            FileName = p_FileName,
+            FilePath = p_FilePath,
+            MimeType = p_MimeType,
+            FileSize = p_FileSize,
+            Active = p_Active,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalMessagesCreate`(
+    IN p_SenderId BIGINT UNSIGNED,
+    IN p_ReceiverId BIGINT UNSIGNED,
+    IN p_Subject VARCHAR(200),
+    IN p_MessageBody TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_SenderId IS NULL OR p_SenderId = 0 THEN
+        SET v_Error = 'SenderId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ReceiverId IS NULL OR p_ReceiverId = 0) THEN
+        SET v_Error = 'ReceiverId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Subject IS NULL OR p_Subject = '') THEN
+        SET v_Error = 'Subject is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MessageBody IS NULL OR p_MessageBody = '') THEN
+        SET v_Error = 'MessageBody is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO portal_messages
+        (SenderId, ReceiverId, Subject, MessageBody, ReadFlag)
+        VALUES
+        (p_SenderId, p_ReceiverId, p_Subject, p_MessageBody, 0);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalMessagesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM portal_messages
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalMessagesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM portal_messages
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalMessagesListAll`()
+BEGIN
+    SELECT *
+    FROM portal_messages
+    ORDER BY Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalMessagesListByReceiverId`(
+    IN p_ReceiverId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_ReceiverId IS NULL OR p_ReceiverId = 0 THEN
+        SELECT 'Invalid ReceiverId' AS Error;
+    ELSE
+        SELECT *
+        FROM portal_messages
+        WHERE ReceiverId = p_ReceiverId
+        ORDER BY Created DESC, Id DESC;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalMessagesListBySenderId`(
+    IN p_SenderId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_SenderId IS NULL OR p_SenderId = 0 THEN
+        SELECT 'Invalid SenderId' AS Error;
+    ELSE
+        SELECT *
+        FROM portal_messages
+        WHERE SenderId = p_SenderId
+        ORDER BY Created DESC, Id DESC;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalMessagesListUnreadByReceiverId`(
+    IN p_ReceiverId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_ReceiverId IS NULL OR p_ReceiverId = 0 THEN
+        SELECT 'Invalid ReceiverId' AS Error;
+    ELSE
+        SELECT *
+        FROM portal_messages
+        WHERE ReceiverId = p_ReceiverId
+          AND ReadFlag = 0
+        ORDER BY Created DESC, Id DESC;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalMessagesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM portal_messages
+    WHERE
+        v_Search IS NULL
+        OR Subject LIKE v_Search
+        OR MessageBody LIKE v_Search
+    ORDER BY Created DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalMessagesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Subject VARCHAR(200),
+    IN p_MessageBody TEXT,
+    IN p_ReadFlag TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Subject IS NULL OR p_Subject = '') THEN
+        SET v_Error = 'Subject is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MessageBody IS NULL OR p_MessageBody = '') THEN
+        SET v_Error = 'MessageBody is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ReadFlag IS NULL THEN
+        SET v_Error = 'ReadFlag is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE portal_messages
+        SET
+            Subject = p_Subject,
+            MessageBody = p_MessageBody,
+            ReadFlag = p_ReadFlag
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalUsersCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_StaffId BIGINT UNSIGNED,
+    IN p_Username VARCHAR(100),
+    IN p_PasswordHash VARCHAR(255),
+    IN p_Role VARCHAR(50)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Username IS NULL OR p_Username = '' THEN
+        SET v_Error = 'Username is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PasswordHash IS NULL OR p_PasswordHash = '') THEN
+        SET v_Error = 'PasswordHash is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Role IS NULL OR p_Role = '') THEN
+        SET v_Error = 'Role is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO portal_users
+        (PatientId, StaffId, Username, PasswordHash, Role)
+        VALUES
+        (p_PatientId, p_StaffId, p_Username, p_PasswordHash, p_Role);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalUsersDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM portal_users
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalUsersGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM portal_users
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalUsersListAll`()
+BEGIN
+    SELECT *
+    FROM portal_users
+    ORDER BY Username, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalUsersListByPatientId`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SELECT 'Invalid PatientId' AS Error;
+    ELSE
+        SELECT *
+        FROM portal_users
+        WHERE PatientId = p_PatientId
+        ORDER BY Username, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalUsersListByStaffId`(
+    IN p_StaffId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_StaffId IS NULL OR p_StaffId = 0 THEN
+        SELECT 'Invalid StaffId' AS Error;
+    ELSE
+        SELECT *
+        FROM portal_users
+        WHERE StaffId = p_StaffId
+        ORDER BY Username, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalUsersSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM portal_users
+    WHERE
+        v_Search IS NULL
+        OR Username LIKE v_Search
+        OR Role LIKE v_Search
+    ORDER BY Username, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PortalUsersUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_StaffId BIGINT UNSIGNED,
+    IN p_Username VARCHAR(100),
+    IN p_PasswordHash VARCHAR(255),
+    IN p_Role VARCHAR(50),
+    IN p_LastLogin DATETIME
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Username IS NULL OR p_Username = '') THEN
+        SET v_Error = 'Username is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PasswordHash IS NULL OR p_PasswordHash = '') THEN
+        SET v_Error = 'PasswordHash is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Role IS NULL OR p_Role = '') THEN
+        SET v_Error = 'Role is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE portal_users
+        SET
+            PatientId = p_PatientId,
+            StaffId = p_StaffId,
+            Username = p_Username,
+            PasswordHash = p_PasswordHash,
+            Role = p_Role,
+            LastLogin = p_LastLogin
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `prescription_coverage` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `MedicarePartDId` bigint(20) unsigned NOT NULL,
+  `DrugName` varchar(255) NOT NULL,
+  `NDC` varchar(20) DEFAULT NULL,
+  `Tier` enum('1','2','3','4','Specialty') NOT NULL,
+  `PriorAuth` tinyint(1) NOT NULL DEFAULT 0,
+  `StepTherapy` tinyint(1) NOT NULL DEFAULT 0,
+  `QuantityLimit` varchar(50) DEFAULT NULL,
+  `CopayAmount` decimal(10,2) DEFAULT NULL,
+  `CoinsurancePct` decimal(5,2) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `prescription_discount_cards` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `PBM` varchar(100) NOT NULL,
+  `NetworkId` varchar(50) DEFAULT NULL,
+  `Bin` varchar(10) NOT NULL,
+  `Pcn` varchar(20) NOT NULL,
+  `GroupNumber` varchar(20) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `prescription_reactions` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PrescriptionId` bigint(20) unsigned NOT NULL,
+  `Reaction` varchar(255) NOT NULL,
+  `Severity` enum('Mild','Moderate','Severe') DEFAULT 'Mild',
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_PrescriptionReactions_PrescriptionId` (`PrescriptionId`),
+  CONSTRAINT `FK_PrescriptionReactions_Prescriptions` FOREIGN KEY (`PrescriptionId`) REFERENCES `prescriptions` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionCoverageCreate`(
+    IN p_MedicarePartDId BIGINT UNSIGNED,
+    IN p_DrugName VARCHAR(255),
+    IN p_NDC VARCHAR(20),
+    IN p_Tier ENUM('1','2','3','4','Specialty'),
+    IN p_PriorAuth TINYINT(1),
+    IN p_StepTherapy TINYINT(1),
+    IN p_QuantityLimit VARCHAR(50),
+    IN p_CopayAmount DECIMAL(10,2),
+    IN p_CoinsurancePct DECIMAL(5,2),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_MedicarePartDId IS NULL OR p_MedicarePartDId = 0 THEN
+        SET v_Error = 'MedicarePartDId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DrugName IS NULL OR p_DrugName = '') THEN
+        SET v_Error = 'DrugName is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Tier IS NULL THEN
+        SET v_Error = 'Tier is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PriorAuth IS NULL THEN
+        SET v_Error = 'PriorAuth flag is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StepTherapy IS NULL THEN
+        SET v_Error = 'StepTherapy flag is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO prescription_coverage
+        (MedicarePartDId, DrugName, NDC, Tier, PriorAuth, StepTherapy,
+         QuantityLimit, CopayAmount, CoinsurancePct, Notes)
+        VALUES
+        (p_MedicarePartDId, p_DrugName, p_NDC, p_Tier, p_PriorAuth, p_StepTherapy,
+         p_QuantityLimit, p_CopayAmount, p_CoinsurancePct, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionCoverageDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM prescription_coverage
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionCoverageGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM prescription_coverage
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionCoverageListAll`()
+BEGIN
+    SELECT *
+    FROM prescription_coverage
+    ORDER BY MedicarePartDId, DrugName, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionCoverageListByMedicarePartDId`(
+    IN p_MedicarePartDId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_MedicarePartDId IS NULL OR p_MedicarePartDId = 0 THEN
+        SELECT 'Invalid MedicarePartDId' AS Error;
+    ELSE
+        SELECT *
+        FROM prescription_coverage
+        WHERE MedicarePartDId = p_MedicarePartDId
+        ORDER BY DrugName, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionCoverageSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM prescription_coverage
+    WHERE
+        v_Search IS NULL
+        OR DrugName LIKE v_Search
+        OR NDC LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY MedicarePartDId, DrugName, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionCoverageUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_MedicarePartDId BIGINT UNSIGNED,
+    IN p_DrugName VARCHAR(255),
+    IN p_NDC VARCHAR(20),
+    IN p_Tier ENUM('1','2','3','4','Specialty'),
+    IN p_PriorAuth TINYINT(1),
+    IN p_StepTherapy TINYINT(1),
+    IN p_QuantityLimit VARCHAR(50),
+    IN p_CopayAmount DECIMAL(10,2),
+    IN p_CoinsurancePct DECIMAL(5,2),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MedicarePartDId IS NULL OR p_MedicarePartDId = 0) THEN
+        SET v_Error = 'MedicarePartDId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DrugName IS NULL OR p_DrugName = '') THEN
+        SET v_Error = 'DrugName is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Tier IS NULL THEN
+        SET v_Error = 'Tier is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_PriorAuth IS NULL THEN
+        SET v_Error = 'PriorAuth flag is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_StepTherapy IS NULL THEN
+        SET v_Error = 'StepTherapy flag is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE prescription_coverage
+        SET
+            MedicarePartDId = p_MedicarePartDId,
+            DrugName = p_DrugName,
+            NDC = p_NDC,
+            Tier = p_Tier,
+            PriorAuth = p_PriorAuth,
+            StepTherapy = p_StepTherapy,
+            QuantityLimit = p_QuantityLimit,
+            CopayAmount = p_CopayAmount,
+            CoinsurancePct = p_CoinsurancePct,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionDiscountCardsCreate`(
+    IN p_Name VARCHAR(100),
+    IN p_PBM VARCHAR(100),
+    IN p_NetworkId VARCHAR(50),
+    IN p_Bin VARCHAR(10),
+    IN p_Pcn VARCHAR(20),
+    IN p_GroupNumber VARCHAR(20),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PBM IS NULL OR p_PBM = '') THEN
+        SET v_Error = 'PBM is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Bin IS NULL OR p_Bin = '') THEN
+        SET v_Error = 'Bin is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Pcn IS NULL OR p_Pcn = '') THEN
+        SET v_Error = 'Pcn is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO prescription_discount_cards
+        (Name, PBM, NetworkId, Bin, Pcn, GroupNumber, Notes, Active)
+        VALUES
+        (p_Name, p_PBM, p_NetworkId, p_Bin, p_Pcn, p_GroupNumber, p_Notes, 1);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionDiscountCardsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        UPDATE prescription_discount_cards
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionDiscountCardsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM prescription_discount_cards
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionDiscountCardsListActive`()
+BEGIN
+    SELECT *
+    FROM prescription_discount_cards
+    WHERE Active = 1
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionDiscountCardsListAll`()
+BEGIN
+    SELECT *
+    FROM prescription_discount_cards
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionDiscountCardsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM prescription_discount_cards
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR PBM LIKE v_Search
+        OR Bin LIKE v_Search
+        OR Pcn LIKE v_Search
+        OR GroupNumber LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionDiscountCardsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_PBM VARCHAR(100),
+    IN p_NetworkId VARCHAR(50),
+    IN p_Bin VARCHAR(10),
+    IN p_Pcn VARCHAR(20),
+    IN p_GroupNumber VARCHAR(20),
+    IN p_Notes TEXT,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PBM IS NULL OR p_PBM = '') THEN
+        SET v_Error = 'PBM is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Bin IS NULL OR p_Bin = '') THEN
+        SET v_Error = 'Bin is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Pcn IS NULL OR p_Pcn = '') THEN
+        SET v_Error = 'Pcn is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Active IS NULL THEN
+        SET v_Error = 'Active flag is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE prescription_discount_cards
+        SET
+            Name = p_Name,
+            PBM = p_PBM,
+            NetworkId = p_NetworkId,
+            Bin = p_Bin,
+            Pcn = p_Pcn,
+            GroupNumber = p_GroupNumber,
+            Notes = p_Notes,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionReactionsCreate`(
+    IN p_PrescriptionId BIGINT UNSIGNED,
+    IN p_Reaction VARCHAR(255),
+    IN p_Severity ENUM('Mild','Moderate','Severe'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PrescriptionId IS NULL OR p_PrescriptionId = 0 THEN
+        SET v_Error = 'PrescriptionId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Reaction IS NULL OR p_Reaction = '') THEN
+        SET v_Error = 'Reaction is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO prescription_reactions
+        (PrescriptionId, Reaction, Severity, Notes)
+        VALUES
+        (p_PrescriptionId, p_Reaction, p_Severity, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionReactionsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM prescription_reactions
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionReactionsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM prescription_reactions
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionReactionsListAll`()
+BEGIN
+    SELECT *
+    FROM prescription_reactions
+    ORDER BY PrescriptionId, Created, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionReactionsListByPrescriptionId`(
+    IN p_PrescriptionId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PrescriptionId IS NULL OR p_PrescriptionId = 0 THEN
+        SELECT 'Invalid PrescriptionId' AS Error;
+    ELSE
+        SELECT *
+        FROM prescription_reactions
+        WHERE PrescriptionId = p_PrescriptionId
+        ORDER BY Created, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionReactionsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM prescription_reactions
+    WHERE
+        v_Search IS NULL
+        OR Reaction LIKE v_Search
+        OR Severity LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY PrescriptionId, Created, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionReactionsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PrescriptionId BIGINT UNSIGNED,
+    IN p_Reaction VARCHAR(255),
+    IN p_Severity ENUM('Mild','Moderate','Severe'),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PrescriptionId IS NULL OR p_PrescriptionId = 0) THEN
+        SET v_Error = 'PrescriptionId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Reaction IS NULL OR p_Reaction = '') THEN
+        SET v_Error = 'Reaction is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE prescription_reactions
+        SET
+            PrescriptionId = p_PrescriptionId,
+            Reaction = p_Reaction,
+            Severity = p_Severity,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `prescriptions` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `DoctorId` bigint(20) unsigned NOT NULL,
+  `MedicationId` bigint(20) unsigned NOT NULL,
+  `PharmacyId` bigint(20) unsigned DEFAULT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `DatePrescribed` datetime NOT NULL,
+  `Dosage` varchar(255) DEFAULT NULL,
+  `Quantity` int(10) unsigned DEFAULT NULL,
+  `Refills` int(10) unsigned DEFAULT 0,
+  `Instructions` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_Prescriptions_PatientId` (`PatientId`),
+  KEY `IX_Prescriptions_DoctorId` (`DoctorId`),
+  KEY `IX_Prescriptions_MedicationId` (`MedicationId`),
+  KEY `IX_Prescriptions_PharmacyId` (`PharmacyId`),
+  KEY `IX_Prescriptions_VisitId` (`VisitId`),
+  CONSTRAINT `FK_Prescriptions_Doctors` FOREIGN KEY (`DoctorId`) REFERENCES `doctors` (`Id`),
+  CONSTRAINT `FK_Prescriptions_Medications` FOREIGN KEY (`MedicationId`) REFERENCES `medications` (`Id`),
+  CONSTRAINT `FK_Prescriptions_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Prescriptions_Pharmacies` FOREIGN KEY (`PharmacyId`) REFERENCES `pharmacies` (`Id`),
+  CONSTRAINT `FK_Prescriptions_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_DoctorId BIGINT UNSIGNED,
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_PharmacyId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_DatePrescribed DATETIME,
+    IN p_Dosage VARCHAR(255),
+    IN p_Quantity INT UNSIGNED,
+    IN p_Refills INT UNSIGNED,
+    IN p_Instructions TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DoctorId IS NULL OR p_DoctorId = 0) THEN
+        SET v_Error = 'DoctorId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MedicationId IS NULL OR p_MedicationId = 0) THEN
+        SET v_Error = 'MedicationId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DatePrescribed IS NULL THEN
+        SET v_Error = 'DatePrescribed is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO prescriptions
+        (PatientId, DoctorId, MedicationId, PharmacyId, VisitId,
+         DatePrescribed, Dosage, Quantity, Refills, Instructions)
+        VALUES
+        (p_PatientId, p_DoctorId, p_MedicationId, p_PharmacyId, p_VisitId,
+         p_DatePrescribed, p_Dosage, p_Quantity, p_Refills, p_Instructions);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM prescriptions
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM prescriptions
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsListAll`()
+BEGIN
+    SELECT *
+    FROM prescriptions
+    ORDER BY PatientId, DatePrescribed DESC, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsListByDoctorId`(
+    IN p_DoctorId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_DoctorId IS NULL OR p_DoctorId = 0 THEN
+        SELECT 'Invalid DoctorId' AS Error;
+    ELSE
+        SELECT *
+        FROM prescriptions
+        WHERE DoctorId = p_DoctorId
+        ORDER BY DatePrescribed DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsListByMedicationId`(
+    IN p_MedicationId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_MedicationId IS NULL OR p_MedicationId = 0 THEN
+        SELECT 'Invalid MedicationId' AS Error;
+    ELSE
+        SELECT *
+        FROM prescriptions
+        WHERE MedicationId = p_MedicationId
+        ORDER BY DatePrescribed DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsListByPatientId`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SELECT 'Invalid PatientId' AS Error;
+    ELSE
+        SELECT *
+        FROM prescriptions
+        WHERE PatientId = p_PatientId
+        ORDER BY DatePrescribed DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsListByPharmacyId`(
+    IN p_PharmacyId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PharmacyId IS NULL OR p_PharmacyId = 0 THEN
+        SELECT 'Invalid PharmacyId' AS Error;
+    ELSE
+        SELECT *
+        FROM prescriptions
+        WHERE PharmacyId = p_PharmacyId
+        ORDER BY DatePrescribed DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsListByVisitId`(
+    IN p_VisitId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_VisitId IS NULL OR p_VisitId = 0 THEN
+        SELECT 'Invalid VisitId' AS Error;
+    ELSE
+        SELECT *
+        FROM prescriptions
+        WHERE VisitId = p_VisitId
+        ORDER BY DatePrescribed DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM prescriptions
+    WHERE
+        v_Search IS NULL
+        OR Dosage LIKE v_Search
+        OR Instructions LIKE v_Search
+    ORDER BY PatientId, DatePrescribed DESC, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `PrescriptionsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_DoctorId BIGINT UNSIGNED,
+    IN p_MedicationId BIGINT UNSIGNED,
+    IN p_PharmacyId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_DatePrescribed DATETIME,
+    IN p_Dosage VARCHAR(255),
+    IN p_Quantity INT UNSIGNED,
+    IN p_Refills INT UNSIGNED,
+    IN p_Instructions TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DoctorId IS NULL OR p_DoctorId = 0) THEN
+        SET v_Error = 'DoctorId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_MedicationId IS NULL OR p_MedicationId = 0) THEN
+        SET v_Error = 'MedicationId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_DatePrescribed IS NULL THEN
+        SET v_Error = 'DatePrescribed is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE prescriptions
+        SET
+            PatientId = p_PatientId,
+            DoctorId = p_DoctorId,
+            MedicationId = p_MedicationId,
+            PharmacyId = p_PharmacyId,
+            VisitId = p_VisitId,
+            DatePrescribed = p_DatePrescribed,
+            Dosage = p_Dosage,
+            Quantity = p_Quantity,
+            Refills = p_Refills,
+            Instructions = p_Instructions
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `procedure_documents` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ProcedureId` bigint(20) unsigned NOT NULL,
+  `DocumentId` bigint(20) unsigned NOT NULL,
+  `LinkedAt` datetime NOT NULL DEFAULT current_timestamp(),
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_ProcedureDocuments_ProcedureId` (`ProcedureId`),
+  KEY `IX_ProcedureDocuments_DocumentId` (`DocumentId`),
+  CONSTRAINT `FK_ProcedureDocuments_Documents` FOREIGN KEY (`DocumentId`) REFERENCES `documents` (`Id`),
+  CONSTRAINT `FK_ProcedureDocuments_Procedures` FOREIGN KEY (`ProcedureId`) REFERENCES `procedures` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `procedure_results` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ProcedureId` bigint(20) unsigned NOT NULL,
+  `ResultType` varchar(100) NOT NULL,
+  `ResultValue` text NOT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_ProcedureResults_ProcedureId` (`ProcedureId`),
+  CONSTRAINT `FK_ProcedureResults_Procedures` FOREIGN KEY (`ProcedureId`) REFERENCES `procedures` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `procedure_staff` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ProcedureId` bigint(20) unsigned NOT NULL,
+  `StaffId` bigint(20) unsigned NOT NULL,
+  `Role` varchar(100) NOT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_ProcedureStaff_ProcedureId` (`ProcedureId`),
+  CONSTRAINT `FK_ProcedureStaff_Procedures` FOREIGN KEY (`ProcedureId`) REFERENCES `procedures` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `procedure_types` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(255) NOT NULL,
+  `Description` text DEFAULT NULL,
+  `CPTCode` varchar(20) DEFAULT NULL,
+  `DefaultDurationMinutes` int(10) unsigned DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureDocumentsCreate`(
+    IN p_ProcedureId BIGINT UNSIGNED,
+    IN p_DocumentId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_ProcedureId IS NULL OR p_ProcedureId = 0 THEN
+        SET v_Error = 'ProcedureId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DocumentId IS NULL OR p_DocumentId = 0) THEN
+        SET v_Error = 'DocumentId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO procedure_documents
+        (ProcedureId, DocumentId, Notes)
+        VALUES
+        (p_ProcedureId, p_DocumentId, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureDocumentsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM procedure_documents
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureDocumentsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM procedure_documents
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureDocumentsListAll`()
+BEGIN
+    SELECT *
+    FROM procedure_documents
+    ORDER BY ProcedureId, DocumentId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureDocumentsListByDocumentId`(
+    IN p_DocumentId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_DocumentId IS NULL OR p_DocumentId = 0 THEN
+        SELECT 'Invalid DocumentId' AS Error;
+    ELSE
+        SELECT *
+        FROM procedure_documents
+        WHERE DocumentId = p_DocumentId
+        ORDER BY ProcedureId, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureDocumentsListByProcedureId`(
+    IN p_ProcedureId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_ProcedureId IS NULL OR p_ProcedureId = 0 THEN
+        SELECT 'Invalid ProcedureId' AS Error;
+    ELSE
+        SELECT *
+        FROM procedure_documents
+        WHERE ProcedureId = p_ProcedureId
+        ORDER BY DocumentId, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureDocumentsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM procedure_documents
+    WHERE
+        v_Search IS NULL
+        OR Notes LIKE v_Search
+    ORDER BY ProcedureId, DocumentId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureDocumentsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_ProcedureId BIGINT UNSIGNED,
+    IN p_DocumentId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ProcedureId IS NULL OR p_ProcedureId = 0) THEN
+        SET v_Error = 'ProcedureId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DocumentId IS NULL OR p_DocumentId = 0) THEN
+        SET v_Error = 'DocumentId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE procedure_documents
+        SET
+            ProcedureId = p_ProcedureId,
+            DocumentId = p_DocumentId,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureResultsCreate`(
+    IN p_ProcedureId BIGINT UNSIGNED,
+    IN p_ResultType VARCHAR(100),
+    IN p_ResultValue TEXT,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_ProcedureId IS NULL OR p_ProcedureId = 0 THEN
+        SET v_Error = 'ProcedureId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ResultType IS NULL OR p_ResultType = '') THEN
+        SET v_Error = 'ResultType is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ResultValue IS NULL OR p_ResultValue = '') THEN
+        SET v_Error = 'ResultValue is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO procedure_results
+        (ProcedureId, ResultType, ResultValue, Notes)
+        VALUES
+        (p_ProcedureId, p_ResultType, p_ResultValue, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureResultsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM procedure_results
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureResultsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM procedure_results
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureResultsListAll`()
+BEGIN
+    SELECT *
+    FROM procedure_results
+    ORDER BY ProcedureId, Created, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureResultsListByProcedureId`(
+    IN p_ProcedureId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_ProcedureId IS NULL OR p_ProcedureId = 0 THEN
+        SELECT 'Invalid ProcedureId' AS Error;
+    ELSE
+        SELECT *
+        FROM procedure_results
+        WHERE ProcedureId = p_ProcedureId
+        ORDER BY Created, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureResultsListByResultType`(
+    IN p_ResultType VARCHAR(100)
+)
+BEGIN
+    IF p_ResultType IS NULL OR p_ResultType = '' THEN
+        SELECT 'Invalid ResultType' AS Error;
+    ELSE
+        SELECT *
+        FROM procedure_results
+        WHERE ResultType = p_ResultType
+        ORDER BY ProcedureId, Created, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureResultsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM procedure_results
+    WHERE
+        v_Search IS NULL
+        OR ResultType LIKE v_Search
+        OR ResultValue LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY ProcedureId, Created, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureResultsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_ProcedureId BIGINT UNSIGNED,
+    IN p_ResultType VARCHAR(100),
+    IN p_ResultValue TEXT,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ProcedureId IS NULL OR p_ProcedureId = 0) THEN
+        SET v_Error = 'ProcedureId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ResultType IS NULL OR p_ResultType = '') THEN
+        SET v_Error = 'ResultType is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ResultValue IS NULL OR p_ResultValue = '') THEN
+        SET v_Error = 'ResultValue is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE procedure_results
+        SET
+            ProcedureId = p_ProcedureId,
+            ResultType = p_ResultType,
+            ResultValue = p_ResultValue,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `procedures` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `ProcedureTypeId` bigint(20) unsigned NOT NULL,
+  `PerformedBy` bigint(20) unsigned DEFAULT NULL,
+  `ProcedureDate` datetime NOT NULL,
+  `AnesthesiaUsed` varchar(255) DEFAULT NULL,
+  `EstimatedBloodLoss` varchar(50) DEFAULT NULL,
+  `Complications` text DEFAULT NULL,
+  `Outcome` text DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Procedures_PatientId` (`PatientId`),
+  KEY `IX_Procedures_VisitId` (`VisitId`),
+  KEY `IX_Procedures_ProcedureTypeId` (`ProcedureTypeId`),
+  CONSTRAINT `FK_Procedures_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Procedures_ProcedureTypes` FOREIGN KEY (`ProcedureTypeId`) REFERENCES `procedure_types` (`Id`),
+  CONSTRAINT `FK_Procedures_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_ProcedureTypeId BIGINT UNSIGNED,
+    IN p_PerformedBy BIGINT UNSIGNED,
+    IN p_ProcedureDate DATETIME,
+    IN p_AnesthesiaUsed VARCHAR(255),
+    IN p_EstimatedBloodLoss VARCHAR(50),
+    IN p_Complications TEXT,
+    IN p_Outcome TEXT,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ProcedureTypeId IS NULL OR p_ProcedureTypeId = 0) THEN
+        SET v_Error = 'ProcedureTypeId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ProcedureDate IS NULL THEN
+        SET v_Error = 'ProcedureDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO procedures
+        (PatientId, VisitId, ProcedureTypeId, PerformedBy, ProcedureDate,
+         AnesthesiaUsed, EstimatedBloodLoss, Complications, Outcome, Notes)
+        VALUES
+        (p_PatientId, p_VisitId, p_ProcedureTypeId, p_PerformedBy, p_ProcedureDate,
+         p_AnesthesiaUsed, p_EstimatedBloodLoss, p_Complications, p_Outcome, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM procedures
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM procedures
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresListAll`()
+BEGIN
+    SELECT *
+    FROM procedures
+    ORDER BY ProcedureDate DESC, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresListByPatientId`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SELECT 'Invalid PatientId' AS Error;
+    ELSE
+        SELECT *
+        FROM procedures
+        WHERE PatientId = p_PatientId
+        ORDER BY ProcedureDate DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresListByPerformedBy`(
+    IN p_PerformedBy BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PerformedBy IS NULL OR p_PerformedBy = 0 THEN
+        SELECT 'Invalid PerformedBy' AS Error;
+    ELSE
+        SELECT *
+        FROM procedures
+        WHERE PerformedBy = p_PerformedBy
+        ORDER BY ProcedureDate DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresListByProcedureTypeId`(
+    IN p_ProcedureTypeId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_ProcedureTypeId IS NULL OR p_ProcedureTypeId = 0 THEN
+        SELECT 'Invalid ProcedureTypeId' AS Error;
+    ELSE
+        SELECT *
+        FROM procedures
+        WHERE ProcedureTypeId = p_ProcedureTypeId
+        ORDER BY ProcedureDate DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresListByVisitId`(
+    IN p_VisitId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_VisitId IS NULL OR p_VisitId = 0 THEN
+        SELECT 'Invalid VisitId' AS Error;
+    ELSE
+        SELECT *
+        FROM procedures
+        WHERE VisitId = p_VisitId
+        ORDER BY ProcedureDate DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM procedures
+    WHERE
+        v_Search IS NULL
+        OR AnesthesiaUsed LIKE v_Search
+        OR EstimatedBloodLoss LIKE v_Search
+        OR Complications LIKE v_Search
+        OR Outcome LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY ProcedureDate DESC, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureStaffCreate`(
+    IN p_ProcedureId BIGINT UNSIGNED,
+    IN p_StaffId BIGINT UNSIGNED,
+    IN p_Role VARCHAR(100)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_ProcedureId IS NULL OR p_ProcedureId = 0 THEN
+        SET v_Error = 'ProcedureId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_StaffId IS NULL OR p_StaffId = 0) THEN
+        SET v_Error = 'StaffId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Role IS NULL OR p_Role = '') THEN
+        SET v_Error = 'Role is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO procedure_staff
+        (ProcedureId, StaffId, Role)
+        VALUES
+        (p_ProcedureId, p_StaffId, p_Role);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureStaffDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM procedure_staff
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureStaffGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM procedure_staff
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureStaffListAll`()
+BEGIN
+    SELECT *
+    FROM procedure_staff
+    ORDER BY ProcedureId, StaffId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureStaffListByProcedureId`(
+    IN p_ProcedureId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_ProcedureId IS NULL OR p_ProcedureId = 0 THEN
+        SELECT 'Invalid ProcedureId' AS Error;
+    ELSE
+        SELECT *
+        FROM procedure_staff
+        WHERE ProcedureId = p_ProcedureId
+        ORDER BY StaffId, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureStaffListByStaffId`(
+    IN p_StaffId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_StaffId IS NULL OR p_StaffId = 0 THEN
+        SELECT 'Invalid StaffId' AS Error;
+    ELSE
+        SELECT *
+        FROM procedure_staff
+        WHERE StaffId = p_StaffId
+        ORDER BY ProcedureId, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureStaffSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM procedure_staff
+    WHERE
+        v_Search IS NULL
+        OR Role LIKE v_Search
+    ORDER BY ProcedureId, StaffId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureStaffUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_ProcedureId BIGINT UNSIGNED,
+    IN p_StaffId BIGINT UNSIGNED,
+    IN p_Role VARCHAR(100)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ProcedureId IS NULL OR p_ProcedureId = 0) THEN
+        SET v_Error = 'ProcedureId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_StaffId IS NULL OR p_StaffId = 0) THEN
+        SET v_Error = 'StaffId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Role IS NULL OR p_Role = '') THEN
+        SET v_Error = 'Role is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE procedure_staff
+        SET
+            ProcedureId = p_ProcedureId,
+            StaffId = p_StaffId,
+            Role = p_Role
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProceduresUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_ProcedureTypeId BIGINT UNSIGNED,
+    IN p_PerformedBy BIGINT UNSIGNED,
+    IN p_ProcedureDate DATETIME,
+    IN p_AnesthesiaUsed VARCHAR(255),
+    IN p_EstimatedBloodLoss VARCHAR(50),
+    IN p_Complications TEXT,
+    IN p_Outcome TEXT,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ProcedureTypeId IS NULL OR p_ProcedureTypeId = 0) THEN
+        SET v_Error = 'ProcedureTypeId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ProcedureDate IS NULL THEN
+        SET v_Error = 'ProcedureDate is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE procedures
+        SET
+            PatientId = p_PatientId,
+            VisitId = p_VisitId,
+            ProcedureTypeId = p_ProcedureTypeId,
+            PerformedBy = p_PerformedBy,
+            ProcedureDate = p_ProcedureDate,
+            AnesthesiaUsed = p_AnesthesiaUsed,
+            EstimatedBloodLoss = p_EstimatedBloodLoss,
+            Complications = p_Complications,
+            Outcome = p_Outcome,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureTypesCreate`(
+    IN p_Name VARCHAR(255),
+    IN p_Description TEXT,
+    IN p_CPTCode VARCHAR(20),
+    IN p_DefaultDurationMinutes INT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO procedure_types
+        (Name, Description, CPTCode, DefaultDurationMinutes, Active)
+        VALUES
+        (p_Name, p_Description, p_CPTCode, p_DefaultDurationMinutes, 1);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureTypesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        UPDATE procedure_types
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureTypesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT
+        Id,
+        CPTCode AS Code,
+        Name AS Description,
+        Active
+    FROM procedure_types
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureTypesListActive`()
+BEGIN
+    SELECT
+        Id,
+        CPTCode AS Code,
+        Name AS Description,
+        Active
+    FROM procedure_types
+    WHERE Active = 1
+    ORDER BY CPTCode, Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureTypesListAll`()
+BEGIN
+    SELECT
+        Id,
+        CPTCode AS Code,
+        Name AS Description,
+        Active
+    FROM procedure_types
+    ORDER BY Active DESC, CPTCode, Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureTypesListInactive`()
+BEGIN
+    SELECT
+        Id,
+        CPTCode AS Code,
+        Name AS Description,
+        Active
+    FROM procedure_types
+    WHERE Active = 0
+    ORDER BY CPTCode, Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureTypesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT
+        Id,
+        CPTCode AS Code,
+        Name AS Description,
+        Active
+    FROM procedure_types
+    WHERE
+        v_Search IS NULL
+        OR CPTCode LIKE v_Search
+        OR Name LIKE v_Search
+        OR Description LIKE v_Search
+    ORDER BY Active DESC, CPTCode, Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProcedureTypesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(255),
+    IN p_Description TEXT,
+    IN p_CPTCode VARCHAR(20),
+    IN p_DefaultDurationMinutes INT UNSIGNED,
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_Active IS NULL THEN
+        SET v_Error = 'Active flag is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE procedure_types
+        SET
+            Name = p_Name,
+            Description = p_Description,
+            CPTCode = p_CPTCode,
+            DefaultDurationMinutes = p_DefaultDurationMinutes,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `referral_documents` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ReferralId` bigint(20) unsigned NOT NULL,
+  `DocumentId` bigint(20) unsigned NOT NULL,
+  `LinkedAt` datetime NOT NULL DEFAULT current_timestamp(),
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_ReferralDocuments_ReferralId` (`ReferralId`),
+  KEY `IX_ReferralDocuments_DocumentId` (`DocumentId`),
+  CONSTRAINT `FK_ReferralDocuments_Documents` FOREIGN KEY (`DocumentId`) REFERENCES `documents` (`Id`),
+  CONSTRAINT `FK_ReferralDocuments_Referrals` FOREIGN KEY (`ReferralId`) REFERENCES `referrals` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `referral_providers` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(255) NOT NULL,
+  `Specialty` varchar(255) DEFAULT NULL,
+  `Organization` varchar(255) DEFAULT NULL,
+  `Phone` varchar(50) DEFAULT NULL,
+  `Fax` varchar(50) DEFAULT NULL,
+  `Email` varchar(255) DEFAULT NULL,
+  `AddressLine1` varchar(255) DEFAULT NULL,
+  `AddressLine2` varchar(255) DEFAULT NULL,
+  `City` varchar(100) DEFAULT NULL,
+  `State` varchar(50) DEFAULT NULL,
+  `PostalCode` varchar(20) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralDocumentsCreate`(
+    IN p_ReferralId BIGINT UNSIGNED,
+    IN p_DocumentId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_ReferralId IS NULL OR p_ReferralId = 0 THEN
+        SET v_Error = 'ReferralId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DocumentId IS NULL OR p_DocumentId = 0) THEN
+        SET v_Error = 'DocumentId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO referral_documents
+        (ReferralId, DocumentId, Notes)
+        VALUES
+        (p_ReferralId, p_DocumentId, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralDocumentsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM referral_documents
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralDocumentsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM referral_documents
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralDocumentsListAll`()
+BEGIN
+    SELECT *
+    FROM referral_documents
+    ORDER BY ReferralId, DocumentId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralDocumentsListByDocumentId`(
+    IN p_DocumentId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_DocumentId IS NULL OR p_DocumentId = 0 THEN
+        SELECT 'Invalid DocumentId' AS Error;
+    ELSE
+        SELECT *
+        FROM referral_documents
+        WHERE DocumentId = p_DocumentId
+        ORDER BY ReferralId, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralDocumentsListByReferralId`(
+    IN p_ReferralId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_ReferralId IS NULL OR p_ReferralId = 0 THEN
+        SELECT 'Invalid ReferralId' AS Error;
+    ELSE
+        SELECT *
+        FROM referral_documents
+        WHERE ReferralId = p_ReferralId
+        ORDER BY DocumentId, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralDocumentsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM referral_documents
+    WHERE
+        v_Search IS NULL
+        OR Notes LIKE v_Search
+    ORDER BY ReferralId, DocumentId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralDocumentsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_ReferralId BIGINT UNSIGNED,
+    IN p_DocumentId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_ReferralId IS NULL OR p_ReferralId = 0) THEN
+        SET v_Error = 'ReferralId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_DocumentId IS NULL OR p_DocumentId = 0) THEN
+        SET v_Error = 'DocumentId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE referral_documents
+        SET
+            ReferralId = p_ReferralId,
+            DocumentId = p_DocumentId,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralProvidersCreate`(
+    IN p_Name VARCHAR(255),
+    IN p_Specialty VARCHAR(255),
+    IN p_Organization VARCHAR(255),
+    IN p_Phone VARCHAR(50),
+    IN p_Fax VARCHAR(50),
+    IN p_Email VARCHAR(255),
+    IN p_AddressLine1 VARCHAR(255),
+    IN p_AddressLine2 VARCHAR(255),
+    IN p_City VARCHAR(100),
+    IN p_State VARCHAR(50),
+    IN p_PostalCode VARCHAR(20),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO referral_providers
+        (Name, Specialty, Organization, Phone, Fax, Email,
+         AddressLine1, AddressLine2, City, State, PostalCode, Notes)
+        VALUES
+        (p_Name, p_Specialty, p_Organization, p_Phone, p_Fax, p_Email,
+         p_AddressLine1, p_AddressLine2, p_City, p_State, p_PostalCode, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralProvidersDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM referral_providers
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralProvidersGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM referral_providers
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralProvidersListAll`()
+BEGIN
+    SELECT *
+    FROM referral_providers
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralProvidersSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM referral_providers
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Specialty LIKE v_Search
+        OR Organization LIKE v_Search
+        OR Phone LIKE v_Search
+        OR Fax LIKE v_Search
+        OR Email LIKE v_Search
+        OR City LIKE v_Search
+        OR State LIKE v_Search
+        OR PostalCode LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY Name, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralProvidersUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(255),
+    IN p_Specialty VARCHAR(255),
+    IN p_Organization VARCHAR(255),
+    IN p_Phone VARCHAR(50),
+    IN p_Fax VARCHAR(50),
+    IN p_Email VARCHAR(255),
+    IN p_AddressLine1 VARCHAR(255),
+    IN p_AddressLine2 VARCHAR(255),
+    IN p_City VARCHAR(100),
+    IN p_State VARCHAR(50),
+    IN p_PostalCode VARCHAR(20),
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE referral_providers
+        SET
+            Name = p_Name,
+            Specialty = p_Specialty,
+            Organization = p_Organization,
+            Phone = p_Phone,
+            Fax = p_Fax,
+            Email = p_Email,
+            AddressLine1 = p_AddressLine1,
+            AddressLine2 = p_AddressLine2,
+            City = p_City,
+            State = p_State,
+            PostalCode = p_PostalCode,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `referrals` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `VisitId` bigint(20) unsigned DEFAULT NULL,
+  `ReferredBy` bigint(20) unsigned DEFAULT NULL,
+  `ReferralProviderId` bigint(20) unsigned DEFAULT NULL,
+  `ReferralDate` datetime NOT NULL,
+  `Reason` text NOT NULL,
+  `Urgency` enum('Routine','Urgent','Stat') NOT NULL DEFAULT 'Routine',
+  `Status` enum('Pending','Sent','Scheduled','Completed','Cancelled') NOT NULL DEFAULT 'Pending',
+  `FollowUpDate` date DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Referrals_PatientId` (`PatientId`),
+  KEY `IX_Referrals_VisitId` (`VisitId`),
+  KEY `IX_Referrals_ReferralProviderId` (`ReferralProviderId`),
+  CONSTRAINT `FK_Referrals_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Referrals_ReferralProviders` FOREIGN KEY (`ReferralProviderId`) REFERENCES `referral_providers` (`Id`),
+  CONSTRAINT `FK_Referrals_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsCreate`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_ReferredBy BIGINT UNSIGNED,
+    IN p_ReferralProviderId BIGINT UNSIGNED,
+    IN p_ReferralDate DATETIME,
+    IN p_Reason TEXT,
+    IN p_Urgency ENUM('Routine','Urgent','Stat'),
+    IN p_Status ENUM('Pending','Sent','Scheduled','Completed','Cancelled'),
+    IN p_FollowUpDate DATE,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ReferralDate IS NULL THEN
+        SET v_Error = 'ReferralDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Reason IS NULL OR p_Reason = '') THEN
+        SET v_Error = 'Reason is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO referrals
+        (PatientId, VisitId, ReferredBy, ReferralProviderId,
+         ReferralDate, Reason, Urgency, Status, FollowUpDate, Notes)
+        VALUES
+        (p_PatientId, p_VisitId, p_ReferredBy, p_ReferralProviderId,
+         p_ReferralDate, p_Reason, p_Urgency, p_Status, p_FollowUpDate, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 0 AS RowsAffected, 'Invalid Id' AS Error;
+    ELSE
+        DELETE FROM referrals
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SELECT 'Invalid Id' AS Error;
+    ELSE
+        SELECT *
+        FROM referrals
+        WHERE Id = p_Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsListAll`()
+BEGIN
+    SELECT *
+    FROM referrals
+    ORDER BY ReferralDate DESC, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsListByPatientId`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_PatientId IS NULL OR p_PatientId = 0 THEN
+        SELECT 'Invalid PatientId' AS Error;
+    ELSE
+        SELECT *
+        FROM referrals
+        WHERE PatientId = p_PatientId
+        ORDER BY ReferralDate DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsListByReferralProviderId`(
+    IN p_ReferralProviderId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_ReferralProviderId IS NULL OR p_ReferralProviderId = 0 THEN
+        SELECT 'Invalid ReferralProviderId' AS Error;
+    ELSE
+        SELECT *
+        FROM referrals
+        WHERE ReferralProviderId = p_ReferralProviderId
+        ORDER BY ReferralDate DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsListByStatus`(
+    IN p_Status ENUM('Pending','Sent','Scheduled','Completed','Cancelled')
+)
+BEGIN
+    IF p_Status IS NULL THEN
+        SELECT 'Invalid Status' AS Error;
+    ELSE
+        SELECT *
+        FROM referrals
+        WHERE Status = p_Status
+        ORDER BY ReferralDate DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsListByUrgency`(
+    IN p_Urgency ENUM('Routine','Urgent','Stat')
+)
+BEGIN
+    IF p_Urgency IS NULL THEN
+        SELECT 'Invalid Urgency' AS Error;
+    ELSE
+        SELECT *
+        FROM referrals
+        WHERE Urgency = p_Urgency
+        ORDER BY ReferralDate DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsListByVisitId`(
+    IN p_VisitId BIGINT UNSIGNED
+)
+BEGIN
+    IF p_VisitId IS NULL OR p_VisitId = 0 THEN
+        SELECT 'Invalid VisitId' AS Error;
+    ELSE
+        SELECT *
+        FROM referrals
+        WHERE VisitId = p_VisitId
+        ORDER BY ReferralDate DESC, Id;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM referrals
+    WHERE
+        v_Search IS NULL
+        OR Reason LIKE v_Search
+        OR Notes LIKE v_Search
+    ORDER BY ReferralDate DESC, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ReferralsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_ReferredBy BIGINT UNSIGNED,
+    IN p_ReferralProviderId BIGINT UNSIGNED,
+    IN p_ReferralDate DATETIME,
+    IN p_Reason TEXT,
+    IN p_Urgency ENUM('Routine','Urgent','Stat'),
+    IN p_Status ENUM('Pending','Sent','Scheduled','Completed','Cancelled'),
+    IN p_FollowUpDate DATE,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PatientId IS NULL OR p_PatientId = 0) THEN
+        SET v_Error = 'PatientId is required';
+    END IF;
+
+    IF v_Error IS NULL AND p_ReferralDate IS NULL THEN
+        SET v_Error = 'ReferralDate is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Reason IS NULL OR p_Reason = '') THEN
+        SET v_Error = 'Reason is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE referrals
+        SET
+            PatientId = p_PatientId,
+            VisitId = p_VisitId,
+            ReferredBy = p_ReferredBy,
+            ReferralProviderId = p_ReferralProviderId,
+            ReferralDate = p_ReferralDate,
+            Reason = p_Reason,
+            Urgency = p_Urgency,
+            Status = p_Status,
+            FollowUpDate = p_FollowUpDate,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `role_permissions` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `RoleId` bigint(20) unsigned NOT NULL,
+  `PermissionId` bigint(20) unsigned NOT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `UX_RolePermissions_Role_Permission` (`RoleId`,`PermissionId`),
+  KEY `IX_RolePermissions_RoleId` (`RoleId`),
+  KEY `IX_RolePermissions_PermissionId` (`PermissionId`),
+  CONSTRAINT `FK_RolePermissions_Permission` FOREIGN KEY (`PermissionId`) REFERENCES `permissions` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `FK_RolePermissions_Role` FOREIGN KEY (`RoleId`) REFERENCES `roles` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolePermissionsCreate`(
+    IN p_RoleId BIGINT UNSIGNED,
+    IN p_PermissionId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_RoleId IS NULL OR p_RoleId = 0 THEN
+        SET v_Error = 'RoleId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PermissionId IS NULL OR p_PermissionId = 0) THEN
+        SET v_Error = 'PermissionId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO role_permissions
+        (RoleId, PermissionId, Notes)
+        VALUES
+        (p_RoleId, p_PermissionId, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolePermissionsDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM role_permissions
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolePermissionsGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM role_permissions
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolePermissionsListAll`()
+BEGIN
+    SELECT *
+    FROM role_permissions
+    ORDER BY RoleId, PermissionId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolePermissionsListByPermission`(
+    IN p_PermissionId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_PermissionId IS NULL OR p_PermissionId = 0 THEN
+        SET v_Error = 'Invalid PermissionId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM role_permissions
+        WHERE PermissionId = p_PermissionId
+        ORDER BY RoleId, Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolePermissionsListByRole`(
+    IN p_RoleId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_RoleId IS NULL OR p_RoleId = 0 THEN
+        SET v_Error = 'Invalid RoleId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM role_permissions
+        WHERE RoleId = p_RoleId
+        ORDER BY PermissionId, Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolePermissionsSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM role_permissions
+    WHERE
+        v_Search IS NULL
+        OR Notes LIKE v_Search
+    ORDER BY RoleId, PermissionId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolePermissionsUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_RoleId BIGINT UNSIGNED,
+    IN p_PermissionId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_RoleId IS NULL OR p_RoleId = 0) THEN
+        SET v_Error = 'RoleId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_PermissionId IS NULL OR p_PermissionId = 0) THEN
+        SET v_Error = 'PermissionId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE role_permissions
+        SET
+            RoleId = p_RoleId,
+            PermissionId = p_PermissionId,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `roles` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Description` varchar(255) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `UX_Roles_Name` (`Name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolesCreate`(
+    IN p_Name VARCHAR(100),
+    IN p_Description VARCHAR(255),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Name IS NULL OR p_Name = '' THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO roles
+        (Name, Description, Active)
+        VALUES
+        (p_Name, p_Description, p_Active);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE roles
+        SET Active = 0
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM roles
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolesList`()
+BEGIN
+    SELECT *
+    FROM roles
+    WHERE Active = 1
+    ORDER BY Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolesListAll`()
+BEGIN
+    SELECT *
+    FROM roles
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM roles
+    WHERE
+        v_Search IS NULL
+        OR Name LIKE v_Search
+        OR Description LIKE v_Search
+    ORDER BY Active DESC, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `RolesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_Description VARCHAR(255),
+    IN p_Active TINYINT(1)
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_Name IS NULL OR p_Name = '') THEN
+        SET v_Error = 'Name is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE roles
+        SET
+            Name = p_Name,
+            Description = p_Description,
+            Active = p_Active
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `staff` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `FirstName` varchar(50) NOT NULL,
+  `LastName` varchar(50) NOT NULL,
+  `MiddleName` varchar(50) DEFAULT NULL,
+  `AddressId` bigint(20) unsigned DEFAULT NULL,
+  `Role` varchar(50) NOT NULL,
+  `Specialty` varchar(100) DEFAULT NULL,
+  `Phone` varchar(50) DEFAULT NULL,
+  `Email` varchar(150) DEFAULT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` datetime NOT NULL DEFAULT current_timestamp(),
+  `Updated` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `FK_Staff_Addresses` (`AddressId`),
+  CONSTRAINT `FK_Staff_Addresses` FOREIGN KEY (`AddressId`) REFERENCES `medical26`.`addresses` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `staff_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE staff
+    SET Active = 0
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `staff_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM staff
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `staff_insert`(
+    IN p_FirstName VARCHAR(50),
+    IN p_LastName VARCHAR(50),
+    IN p_MiddleName VARCHAR(50),
+    IN p_AddressId BIGINT UNSIGNED,
+    IN p_Role VARCHAR(50),
+    IN p_Specialty VARCHAR(100),
+    IN p_Phone VARCHAR(50),
+    IN p_Email VARCHAR(150),
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO staff (
+        FirstName, LastName, MiddleName,
+        AddressId, Role, Specialty,
+        Phone, Email, Active
+    )
+    VALUES (
+        p_FirstName, p_LastName, p_MiddleName,
+        p_AddressId, p_Role, p_Specialty,
+        p_Phone, p_Email, 1
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `staff_list_active`()
+BEGIN
+    SELECT *
+    FROM staff
+    WHERE Active = 1
+    ORDER BY LastName, FirstName;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `staff_list_all`()
+BEGIN
+    SELECT *
+    FROM staff
+    ORDER BY LastName, FirstName;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `staff_search`(
+    IN p_Name VARCHAR(150),
+    IN p_Role VARCHAR(50),
+    IN p_Specialty VARCHAR(100)
+)
+BEGIN
+    SELECT *
+    FROM staff
+    WHERE Active = 1
+      AND (p_Name IS NULL OR CONCAT(FirstName, ' ', LastName) LIKE CONCAT('%', p_Name, '%'))
+      AND (p_Role IS NULL OR Role LIKE CONCAT('%', p_Role, '%'))
+      AND (p_Specialty IS NULL OR Specialty LIKE CONCAT('%', p_Specialty, '%'))
+    ORDER BY LastName, FirstName;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `staff_search_all`(
+    IN p_Name VARCHAR(150),
+    IN p_Role VARCHAR(50),
+    IN p_Specialty VARCHAR(100)
+)
+BEGIN
+    SELECT *
+    FROM staff
+    WHERE (p_Name IS NULL OR CONCAT(FirstName, ' ', LastName) LIKE CONCAT('%', p_Name, '%'))
+      AND (p_Role IS NULL OR Role LIKE CONCAT('%', p_Role, '%'))
+      AND (p_Specialty IS NULL OR Specialty LIKE CONCAT('%', p_Specialty, '%'))
+    ORDER BY LastName, FirstName;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `staff_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_FirstName VARCHAR(50),
+    IN p_LastName VARCHAR(50),
+    IN p_MiddleName VARCHAR(50),
+    IN p_AddressId BIGINT UNSIGNED,
+    IN p_Role VARCHAR(50),
+    IN p_Specialty VARCHAR(100),
+    IN p_Phone VARCHAR(50),
+    IN p_Email VARCHAR(150),
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE staff
+    SET
+        FirstName = p_FirstName,
+        LastName = p_LastName,
+        MiddleName = p_MiddleName,
+        AddressId = p_AddressId,
+        Role = p_Role,
+        Specialty = p_Specialty,
+        Phone = p_Phone,
+        Email = p_Email
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `statement_delivery_log` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `StatementId` bigint(20) unsigned NOT NULL,
+  `DeliveryDate` datetime NOT NULL,
+  `Method` enum('Print','Email','Portal','SMS') NOT NULL,
+  `Destination` varchar(255) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_StatementDeliveryLog_StatementId` (`StatementId`),
+  CONSTRAINT `FK_StatementDeliveryLog_Statements` FOREIGN KEY (`StatementId`) REFERENCES `statements` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_delivery_log_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM statement_delivery_log
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_delivery_log_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM statement_delivery_log
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_delivery_log_insert`(
+    IN p_StatementId BIGINT UNSIGNED,
+    IN p_DeliveryDate DATETIME,
+    IN p_Method ENUM('Print','Email','Portal','SMS'),
+    IN p_Destination VARCHAR(255),
+    IN p_Notes TEXT,
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO statement_delivery_log (
+        StatementId, DeliveryDate, Method, Destination, Notes
+    )
+    VALUES (
+        p_StatementId, p_DeliveryDate, p_Method, p_Destination, p_Notes
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_delivery_log_list_all`()
+BEGIN
+    SELECT *
+    FROM statement_delivery_log
+    ORDER BY DeliveryDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_delivery_log_list_by_statement`(
+    IN p_StatementId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM statement_delivery_log
+    WHERE StatementId = p_StatementId
+    ORDER BY DeliveryDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_delivery_log_search`(
+    IN p_Method VARCHAR(20),
+    IN p_Destination VARCHAR(255),
+    IN p_Notes TEXT
+)
+BEGIN
+    SELECT *
+    FROM statement_delivery_log
+    WHERE (p_Method IS NULL OR Method = p_Method)
+      AND (p_Destination IS NULL OR Destination LIKE CONCAT('%', p_Destination, '%'))
+      AND (p_Notes IS NULL OR Notes LIKE CONCAT('%', p_Notes, '%'))
+    ORDER BY DeliveryDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_delivery_log_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_StatementId BIGINT UNSIGNED,
+    IN p_DeliveryDate DATETIME,
+    IN p_Method ENUM('Print','Email','Portal','SMS'),
+    IN p_Destination VARCHAR(255),
+    IN p_Notes TEXT,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE statement_delivery_log
+    SET
+        StatementId = p_StatementId,
+        DeliveryDate = p_DeliveryDate,
+        Method = p_Method,
+        Destination = p_Destination,
+        Notes = p_Notes
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `statement_line_items` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `StatementId` bigint(20) unsigned NOT NULL,
+  `LedgerEntryId` bigint(20) unsigned NOT NULL,
+  `LineDate` datetime NOT NULL,
+  `Description` varchar(255) NOT NULL,
+  `Amount` decimal(10,2) NOT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_StatementLineItems_StatementId` (`StatementId`),
+  KEY `IX_StatementLineItems_LedgerEntryId` (`LedgerEntryId`),
+  CONSTRAINT `FK_StatementLineItems_LedgerEntries` FOREIGN KEY (`LedgerEntryId`) REFERENCES `ledger_entries` (`Id`),
+  CONSTRAINT `FK_StatementLineItems_Statements` FOREIGN KEY (`StatementId`) REFERENCES `statements` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_line_items_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM statement_line_items
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_line_items_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM statement_line_items
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_line_items_insert`(
+    IN p_StatementId BIGINT UNSIGNED,
+    IN p_LedgerEntryId BIGINT UNSIGNED,
+    IN p_LineDate DATETIME,
+    IN p_Description VARCHAR(255),
+    IN p_Amount DECIMAL(10,2),
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO statement_line_items (
+        StatementId, LedgerEntryId, LineDate, Description, Amount
+    )
+    VALUES (
+        p_StatementId, p_LedgerEntryId, p_LineDate, p_Description, p_Amount
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_line_items_list_all`()
+BEGIN
+    SELECT *
+    FROM statement_line_items
+    ORDER BY StatementId, LineDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_line_items_list_by_statement`(
+    IN p_StatementId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM statement_line_items
+    WHERE StatementId = p_StatementId
+    ORDER BY LineDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_line_items_search`(
+    IN p_Description VARCHAR(255),
+    IN p_MinAmount DECIMAL(10,2),
+    IN p_MaxAmount DECIMAL(10,2)
+)
+BEGIN
+    SELECT *
+    FROM statement_line_items
+    WHERE (p_Description IS NULL OR Description LIKE CONCAT('%', p_Description, '%'))
+      AND (p_MinAmount IS NULL OR Amount >= p_MinAmount)
+      AND (p_MaxAmount IS NULL OR Amount <= p_MaxAmount)
+    ORDER BY LineDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statement_line_items_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_StatementId BIGINT UNSIGNED,
+    IN p_LedgerEntryId BIGINT UNSIGNED,
+    IN p_LineDate DATETIME,
+    IN p_Description VARCHAR(255),
+    IN p_Amount DECIMAL(10,2),
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE statement_line_items
+    SET
+        StatementId = p_StatementId,
+        LedgerEntryId = p_LedgerEntryId,
+        LineDate = p_LineDate,
+        Description = p_Description,
+        Amount = p_Amount
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `statements` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `StatementDate` datetime NOT NULL,
+  `PeriodStart` date NOT NULL,
+  `PeriodEnd` date NOT NULL,
+  `BeginningBalance` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `NewCharges` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `Payments` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `Adjustments` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `EndingBalance` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Statements_PatientId` (`PatientId`),
+  CONSTRAINT `FK_Statements_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statements_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM statements
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statements_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM statements
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statements_insert`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_StatementDate DATETIME,
+    IN p_PeriodStart DATE,
+    IN p_PeriodEnd DATE,
+    IN p_BeginningBalance DECIMAL(10,2),
+    IN p_NewCharges DECIMAL(10,2),
+    IN p_Payments DECIMAL(10,2),
+    IN p_Adjustments DECIMAL(10,2),
+    IN p_EndingBalance DECIMAL(10,2),
+    IN p_Notes TEXT,
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO statements (
+        PatientId, StatementDate, PeriodStart, PeriodEnd,
+        BeginningBalance, NewCharges, Payments, Adjustments,
+        EndingBalance, Notes
+    )
+    VALUES (
+        p_PatientId, p_StatementDate, p_PeriodStart, p_PeriodEnd,
+        p_BeginningBalance, p_NewCharges, p_Payments, p_Adjustments,
+        p_EndingBalance, p_Notes
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statements_list_all`()
+BEGIN
+    SELECT *
+    FROM statements
+    ORDER BY StatementDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statements_list_by_patient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM statements
+    WHERE PatientId = p_PatientId
+    ORDER BY StatementDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statements_search`(
+    IN p_StartDate DATETIME,
+    IN p_EndDate DATETIME,
+    IN p_MinBalance DECIMAL(10,2),
+    IN p_MaxBalance DECIMAL(10,2)
+)
+BEGIN
+    SELECT *
+    FROM statements
+    WHERE (p_StartDate IS NULL OR StatementDate >= p_StartDate)
+      AND (p_EndDate IS NULL OR StatementDate <= p_EndDate)
+      AND (p_MinBalance IS NULL OR EndingBalance >= p_MinBalance)
+      AND (p_MaxBalance IS NULL OR EndingBalance <= p_MaxBalance)
+    ORDER BY StatementDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `statements_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_StatementDate DATETIME,
+    IN p_PeriodStart DATE,
+    IN p_PeriodEnd DATE,
+    IN p_BeginningBalance DECIMAL(10,2),
+    IN p_NewCharges DECIMAL(10,2),
+    IN p_Payments DECIMAL(10,2),
+    IN p_Adjustments DECIMAL(10,2),
+    IN p_EndingBalance DECIMAL(10,2),
+    IN p_Notes TEXT,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE statements
+    SET
+        PatientId = p_PatientId,
+        StatementDate = p_StatementDate,
+        PeriodStart = p_PeriodStart,
+        PeriodEnd = p_PeriodEnd,
+        BeginningBalance = p_BeginningBalance,
+        NewCharges = p_NewCharges,
+        Payments = p_Payments,
+        Adjustments = p_Adjustments,
+        EndingBalance = p_EndingBalance,
+        Notes = p_Notes
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `tasks` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `AssignedToId` bigint(20) unsigned DEFAULT NULL,
+  `PatientId` bigint(20) unsigned DEFAULT NULL,
+  `TaskType` varchar(100) NOT NULL,
+  `Description` text NOT NULL,
+  `DueDate` datetime DEFAULT NULL,
+  `Completed` tinyint(1) NOT NULL DEFAULT 0,
+  `Created` datetime NOT NULL DEFAULT current_timestamp(),
+  `Updated` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `fk_tasks_assigned` (`AssignedToId`),
+  KEY `fk_tasks_patient` (`PatientId`),
+  CONSTRAINT `fk_tasks_assigned` FOREIGN KEY (`AssignedToId`) REFERENCES `staff` (`Id`),
+  CONSTRAINT `fk_tasks_patient` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `tasks_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM tasks
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `tasks_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM tasks
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `tasks_insert`(
+    IN p_AssignedToId BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_TaskType VARCHAR(100),
+    IN p_Description TEXT,
+    IN p_DueDate DATETIME,
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO tasks (
+        AssignedToId, PatientId, TaskType, Description,
+        DueDate, Completed
+    )
+    VALUES (
+        p_AssignedToId, p_PatientId, p_TaskType, p_Description,
+        p_DueDate, 0
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `tasks_list_active`()
+BEGIN
+    SELECT *
+    FROM tasks
+    WHERE Completed = 0
+    ORDER BY DueDate IS NULL, DueDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `tasks_list_all`()
+BEGIN
+    SELECT *
+    FROM tasks
+    ORDER BY DueDate IS NULL, DueDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `tasks_list_by_patient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM tasks
+    WHERE PatientId = p_PatientId
+    ORDER BY Completed, DueDate IS NULL, DueDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `tasks_list_by_staff`(
+    IN p_AssignedToId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM tasks
+    WHERE AssignedToId = p_AssignedToId
+    ORDER BY Completed, DueDate IS NULL, DueDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `tasks_search`(
+    IN p_TaskType VARCHAR(100),
+    IN p_Description VARCHAR(255),
+    IN p_Completed TINYINT
+)
+BEGIN
+    SELECT *
+    FROM tasks
+    WHERE (p_TaskType IS NULL OR TaskType LIKE CONCAT('%', p_TaskType, '%'))
+      AND (p_Description IS NULL OR Description LIKE CONCAT('%', p_Description, '%'))
+      AND (p_Completed IS NULL OR Completed = p_Completed)
+    ORDER BY Completed, DueDate IS NULL, DueDate, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `tasks_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_AssignedToId BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_TaskType VARCHAR(100),
+    IN p_Description TEXT,
+    IN p_DueDate DATETIME,
+    IN p_Completed TINYINT,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE tasks
+    SET
+        AssignedToId = p_AssignedToId,
+        PatientId = p_PatientId,
+        TaskType = p_TaskType,
+        Description = p_Description,
+        DueDate = p_DueDate,
+        Completed = p_Completed
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `test_types` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Category` varchar(100) DEFAULT NULL,
+  `Description` text DEFAULT NULL,
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `test_types_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM test_types
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `test_types_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM test_types
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `test_types_insert`(
+    IN p_Name VARCHAR(100),
+    IN p_Category VARCHAR(100),
+    IN p_Description TEXT,
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO test_types (
+        Name, Category, Description
+    )
+    VALUES (
+        p_Name, p_Category, p_Description
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `test_types_list_all`()
+BEGIN
+    SELECT *
+    FROM test_types
+    ORDER BY Category, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `test_types_search`(
+    IN p_Name VARCHAR(100),
+    IN p_Category VARCHAR(100)
+)
+BEGIN
+    SELECT *
+    FROM test_types
+    WHERE (p_Name IS NULL OR Name LIKE CONCAT('%', p_Name, '%'))
+      AND (p_Category IS NULL OR Category LIKE CONCAT('%', p_Category, '%'))
+    ORDER BY Category, Name;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `test_types_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Name VARCHAR(100),
+    IN p_Category VARCHAR(100),
+    IN p_Description TEXT,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE test_types
+    SET
+        Name = p_Name,
+        Category = p_Category,
+        Description = p_Description
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `troop_tracking` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `ClaimId` bigint(20) unsigned DEFAULT NULL,
+  `AmountApplied` decimal(10,2) NOT NULL,
+  `Phase` enum('Deductible','Initial','Gap','Catastrophic') NOT NULL,
+  `AppliedDate` datetime NOT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `troop_tracking_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM troop_tracking
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `troop_tracking_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM troop_tracking
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `troop_tracking_insert`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ClaimId BIGINT UNSIGNED,
+    IN p_AmountApplied DECIMAL(10,2),
+    IN p_Phase ENUM('Deductible','Initial','Gap','Catastrophic'),
+    IN p_AppliedDate DATETIME,
+    IN p_Notes TEXT,
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO troop_tracking (
+        PatientId, ClaimId, AmountApplied,
+        Phase, AppliedDate, Notes
+    )
+    VALUES (
+        p_PatientId, p_ClaimId, p_AmountApplied,
+        p_Phase, p_AppliedDate, p_Notes
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `troop_tracking_list_all`()
+BEGIN
+    SELECT *
+    FROM troop_tracking
+    ORDER BY AppliedDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `troop_tracking_list_by_claim`(
+    IN p_ClaimId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM troop_tracking
+    WHERE ClaimId = p_ClaimId
+    ORDER BY AppliedDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `troop_tracking_list_by_patient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM troop_tracking
+    WHERE PatientId = p_PatientId
+    ORDER BY AppliedDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `troop_tracking_search`(
+    IN p_Phase VARCHAR(20),
+    IN p_StartDate DATETIME,
+    IN p_EndDate DATETIME,
+    IN p_MinAmount DECIMAL(10,2),
+    IN p_MaxAmount DECIMAL(10,2)
+)
+BEGIN
+    SELECT *
+    FROM troop_tracking
+    WHERE (p_Phase IS NULL OR Phase = p_Phase)
+      AND (p_StartDate IS NULL OR AppliedDate >= p_StartDate)
+      AND (p_EndDate IS NULL OR AppliedDate <= p_EndDate)
+      AND (p_MinAmount IS NULL OR AmountApplied >= p_MinAmount)
+      AND (p_MaxAmount IS NULL OR AmountApplied <= p_MaxAmount)
+    ORDER BY AppliedDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `troop_tracking_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_ClaimId BIGINT UNSIGNED,
+    IN p_AmountApplied DECIMAL(10,2),
+    IN p_Phase ENUM('Deductible','Initial','Gap','Catastrophic'),
+    IN p_AppliedDate DATETIME,
+    IN p_Notes TEXT,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE troop_tracking
+    SET
+        PatientId = p_PatientId,
+        ClaimId = p_ClaimId,
+        AmountApplied = p_AmountApplied,
+        Phase = p_Phase,
+        AppliedDate = p_AppliedDate,
+        Notes = p_Notes
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `user_roles` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `UserId` bigint(20) unsigned NOT NULL,
+  `RoleId` bigint(20) unsigned NOT NULL,
+  `Notes` text DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `UX_UserRoles_User_Role` (`UserId`,`RoleId`),
+  KEY `IX_UserRoles_UserId` (`UserId`),
+  KEY `IX_UserRoles_RoleId` (`RoleId`),
+  CONSTRAINT `FK_UserRoles_Role` FOREIGN KEY (`RoleId`) REFERENCES `roles` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `FK_UserRoles_User` FOREIGN KEY (`UserId`) REFERENCES `users` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `user_staff` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `UserId` bigint(20) unsigned NOT NULL,
+  `StaffId` bigint(20) unsigned NOT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `fk_user_staff_user` (`UserId`),
+  KEY `fk_user_staff_staff` (`StaffId`),
+  CONSTRAINT `fk_user_staff_staff` FOREIGN KEY (`StaffId`) REFERENCES `staff` (`Id`),
+  CONSTRAINT `fk_user_staff_user` FOREIGN KEY (`UserId`) REFERENCES `users` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `user_staff_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM user_staff
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `user_staff_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM user_staff
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `user_staff_insert`(
+    IN p_UserId BIGINT UNSIGNED,
+    IN p_StaffId BIGINT UNSIGNED,
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO user_staff (
+        UserId, StaffId
+    )
+    VALUES (
+        p_UserId, p_StaffId
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `user_staff_list_all`()
+BEGIN
+    SELECT *
+    FROM user_staff
+    ORDER BY Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `user_staff_list_by_staff`(
+    IN p_StaffId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM user_staff
+    WHERE StaffId = p_StaffId
+    ORDER BY Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `user_staff_list_by_user`(
+    IN p_UserId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM user_staff
+    WHERE UserId = p_UserId
+    ORDER BY Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `user_staff_search`(
+    IN p_UserId BIGINT UNSIGNED,
+    IN p_StaffId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM user_staff
+    WHERE (p_UserId IS NULL OR UserId = p_UserId)
+      AND (p_StaffId IS NULL OR StaffId = p_StaffId)
+    ORDER BY Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `user_staff_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_UserId BIGINT UNSIGNED,
+    IN p_StaffId BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE user_staff
+    SET
+        UserId = p_UserId,
+        StaffId = p_StaffId
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `UserRolesCreate`(
+    IN p_UserId BIGINT UNSIGNED,
+    IN p_RoleId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_UserId IS NULL OR p_UserId = 0 THEN
+        SET v_Error = 'UserId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_RoleId IS NULL OR p_RoleId = 0) THEN
+        SET v_Error = 'RoleId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        INSERT INTO user_roles
+        (UserId, RoleId, Notes)
+        VALUES
+        (p_UserId, p_RoleId, p_Notes);
+
+        SELECT LAST_INSERT_ID() AS NewId;
+    ELSE
+        SELECT NULL AS NewId, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `UserRolesDelete`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        DELETE FROM user_roles
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `UserRolesGet`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM user_roles
+        WHERE Id = p_Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `UserRolesListAll`()
+BEGIN
+    SELECT *
+    FROM user_roles
+    ORDER BY UserId, RoleId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `UserRolesListByRole`(
+    IN p_RoleId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_RoleId IS NULL OR p_RoleId = 0 THEN
+        SET v_Error = 'Invalid RoleId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM user_roles
+        WHERE RoleId = p_RoleId
+        ORDER BY UserId, Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `UserRolesListByUser`(
+    IN p_UserId BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_UserId IS NULL OR p_UserId = 0 THEN
+        SET v_Error = 'Invalid UserId';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        SELECT *
+        FROM user_roles
+        WHERE UserId = p_UserId
+        ORDER BY RoleId, Id;
+    ELSE
+        SELECT v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `UserRolesSearch`(
+    IN p_Search VARCHAR(255)
+)
+BEGIN
+    DECLARE v_Search VARCHAR(255);
+
+    IF p_Search IS NULL OR p_Search = '' THEN
+        SET v_Search = NULL;
+    ELSE
+        SET v_Search = CONCAT('%', p_Search, '%');
+    END IF;
+
+    SELECT *
+    FROM user_roles
+    WHERE
+        v_Search IS NULL
+        OR Notes LIKE v_Search
+    ORDER BY UserId, RoleId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `UserRolesUpdate`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_UserId BIGINT UNSIGNED,
+    IN p_RoleId BIGINT UNSIGNED,
+    IN p_Notes TEXT
+)
+BEGIN
+    DECLARE v_Error TEXT DEFAULT NULL;
+
+    IF p_Id IS NULL OR p_Id = 0 THEN
+        SET v_Error = 'Invalid Id';
+    END IF;
+
+    IF v_Error IS NULL AND (p_UserId IS NULL OR p_UserId = 0) THEN
+        SET v_Error = 'UserId is required';
+    END IF;
+
+    IF v_Error IS NULL AND (p_RoleId IS NULL OR p_RoleId = 0) THEN
+        SET v_Error = 'RoleId is required';
+    END IF;
+
+    IF v_Error IS NULL THEN
+        UPDATE user_roles
+        SET
+            UserId = p_UserId,
+            RoleId = p_RoleId,
+            Notes = p_Notes
+        WHERE Id = p_Id;
+
+        SELECT ROW_COUNT() AS RowsAffected;
+    ELSE
+        SELECT 0 AS RowsAffected, v_Error AS Error;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `users` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `Username` varchar(100) NOT NULL,
+  `PasswordHash` varchar(255) NOT NULL,
+  `DisplayName` varchar(255) NOT NULL,
+  `Email` varchar(255) DEFAULT NULL,
+  `Role` varchar(50) NOT NULL,
+  `Active` tinyint(1) NOT NULL DEFAULT 1,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `Username` (`Username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `users_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE users
+    SET Active = 0
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `users_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM users
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `users_get_by_username`(
+    IN p_Username VARCHAR(100)
+)
+BEGIN
+    SELECT *
+    FROM users
+    WHERE Username = p_Username
+    LIMIT 1;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `users_insert`(
+    IN p_Username VARCHAR(100),
+    IN p_PasswordHash VARCHAR(255),
+    IN p_DisplayName VARCHAR(255),
+    IN p_Email VARCHAR(255),
+    IN p_Role VARCHAR(50),
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO users (
+        Username, PasswordHash, DisplayName,
+        Email, Role, Active
+    )
+    VALUES (
+        p_Username, p_PasswordHash, p_DisplayName,
+        p_Email, p_Role, 1
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `users_list_active`()
+BEGIN
+    SELECT *
+    FROM users
+    WHERE Active = 1
+    ORDER BY DisplayName, Username;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `users_list_all`()
+BEGIN
+    SELECT *
+    FROM users
+    ORDER BY DisplayName, Username;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `users_search`(
+    IN p_Name VARCHAR(255),
+    IN p_Email VARCHAR(255),
+    IN p_Role VARCHAR(50)
+)
+BEGIN
+    SELECT *
+    FROM users
+    WHERE Active = 1
+      AND (p_Name IS NULL OR DisplayName LIKE CONCAT('%', p_Name, '%'))
+      AND (p_Email IS NULL OR Email LIKE CONCAT('%', p_Email, '%'))
+      AND (p_Role IS NULL OR Role = p_Role)
+    ORDER BY DisplayName, Username;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `users_search_all`(
+    IN p_Name VARCHAR(255),
+    IN p_Email VARCHAR(255),
+    IN p_Role VARCHAR(50)
+)
+BEGIN
+    SELECT *
+    FROM users
+    WHERE (p_Name IS NULL OR DisplayName LIKE CONCAT('%', p_Name, '%'))
+      AND (p_Email IS NULL OR Email LIKE CONCAT('%', p_Email, '%'))
+      AND (p_Role IS NULL OR Role = p_Role)
+    ORDER BY DisplayName, Username;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `users_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_Username VARCHAR(100),
+    IN p_PasswordHash VARCHAR(255),
+    IN p_DisplayName VARCHAR(255),
+    IN p_Email VARCHAR(255),
+    IN p_Role VARCHAR(50),
+    IN p_Active TINYINT,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE users
+    SET
+        Username = p_Username,
+        PasswordHash = p_PasswordHash,
+        DisplayName = p_DisplayName,
+        Email = p_Email,
+        Role = p_Role,
+        Active = p_Active
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `visit_charges` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `VisitId` bigint(20) unsigned NOT NULL,
+  `ChargeId` bigint(20) unsigned NOT NULL,
+  `Quantity` int(10) unsigned NOT NULL DEFAULT 1,
+  `Price` decimal(10,2) NOT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_VisitCharges_VisitId` (`VisitId`),
+  KEY `IX_VisitCharges_ChargeId` (`ChargeId`),
+  CONSTRAINT `FK_VisitCharges_ChargeMaster` FOREIGN KEY (`ChargeId`) REFERENCES `charge_master` (`Id`),
+  CONSTRAINT `FK_VisitCharges_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visit_charges_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM visit_charges
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visit_charges_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM visit_charges
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visit_charges_insert`(
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_ChargeId BIGINT UNSIGNED,
+    IN p_Quantity INT UNSIGNED,
+    IN p_Price DECIMAL(10,2),
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO visit_charges (
+        VisitId, ChargeId, Quantity, Price
+    )
+    VALUES (
+        p_VisitId, p_ChargeId, p_Quantity, p_Price
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visit_charges_list_all`()
+BEGIN
+    SELECT *
+    FROM visit_charges
+    ORDER BY VisitId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visit_charges_list_by_charge`(
+    IN p_ChargeId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM visit_charges
+    WHERE ChargeId = p_ChargeId
+    ORDER BY Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visit_charges_list_by_visit`(
+    IN p_VisitId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM visit_charges
+    WHERE VisitId = p_VisitId
+    ORDER BY Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visit_charges_search`(
+    IN p_MinQuantity INT UNSIGNED,
+    IN p_MaxQuantity INT UNSIGNED,
+    IN p_MinPrice DECIMAL(10,2),
+    IN p_MaxPrice DECIMAL(10,2)
+)
+BEGIN
+    SELECT *
+    FROM visit_charges
+    WHERE (p_MinQuantity IS NULL OR Quantity >= p_MinQuantity)
+      AND (p_MaxQuantity IS NULL OR Quantity <= p_MaxQuantity)
+      AND (p_MinPrice IS NULL OR Price >= p_MinPrice)
+      AND (p_MaxPrice IS NULL OR Price <= p_MaxPrice)
+    ORDER BY VisitId, Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visit_charges_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_ChargeId BIGINT UNSIGNED,
+    IN p_Quantity INT UNSIGNED,
+    IN p_Price DECIMAL(10,2),
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE visit_charges
+    SET
+        VisitId = p_VisitId,
+        ChargeId = p_ChargeId,
+        Quantity = p_Quantity,
+        Price = p_Price
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `visits` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `DoctorId` bigint(20) unsigned NOT NULL,
+  `FacilityId` bigint(20) unsigned NOT NULL,
+  `VisitDate` datetime NOT NULL,
+  `Reason` varchar(255) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  `Weight` decimal(5,2) DEFAULT NULL,
+  `BloodPressure` varchar(20) DEFAULT NULL,
+  `Temperature` decimal(4,1) DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT current_timestamp(),
+  `Updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`Id`),
+  KEY `IX_Visits_PatientId` (`PatientId`),
+  KEY `IX_Visits_DoctorId` (`DoctorId`),
+  KEY `IX_Visits_FacilityId` (`FacilityId`),
+  CONSTRAINT `FK_Visits_Doctors` FOREIGN KEY (`DoctorId`) REFERENCES `doctors` (`Id`),
+  CONSTRAINT `FK_Visits_Facilities` FOREIGN KEY (`FacilityId`) REFERENCES `facilities` (`Id`),
+  CONSTRAINT `FK_Visits_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visits_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM visits
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visits_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM visits
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visits_insert`(
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_DoctorId BIGINT UNSIGNED,
+    IN p_FacilityId BIGINT UNSIGNED,
+    IN p_VisitDate DATETIME,
+    IN p_Reason VARCHAR(255),
+    IN p_Notes TEXT,
+    IN p_Weight DECIMAL(5,2),
+    IN p_BloodPressure VARCHAR(20),
+    IN p_Temperature DECIMAL(4,1),
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO visits (
+        PatientId, DoctorId, FacilityId,
+        VisitDate, Reason, Notes,
+        Weight, BloodPressure, Temperature
+    )
+    VALUES (
+        p_PatientId, p_DoctorId, p_FacilityId,
+        p_VisitDate, p_Reason, p_Notes,
+        p_Weight, p_BloodPressure, p_Temperature
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visits_list_all`()
+BEGIN
+    SELECT *
+    FROM visits
+    ORDER BY VisitDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visits_list_by_doctor`(
+    IN p_DoctorId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM visits
+    WHERE DoctorId = p_DoctorId
+    ORDER BY VisitDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visits_list_by_facility`(
+    IN p_FacilityId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM visits
+    WHERE FacilityId = p_FacilityId
+    ORDER BY VisitDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visits_list_by_patient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM visits
+    WHERE PatientId = p_PatientId
+    ORDER BY VisitDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visits_search`(
+    IN p_StartDate DATETIME,
+    IN p_EndDate DATETIME,
+    IN p_Reason VARCHAR(255),
+    IN p_DoctorId BIGINT UNSIGNED,
+    IN p_FacilityId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM visits
+    WHERE (p_StartDate IS NULL OR VisitDate >= p_StartDate)
+      AND (p_EndDate IS NULL OR VisitDate <= p_EndDate)
+      AND (p_Reason IS NULL OR Reason LIKE CONCAT('%', p_Reason, '%'))
+      AND (p_DoctorId IS NULL OR DoctorId = p_DoctorId)
+      AND (p_FacilityId IS NULL OR FacilityId = p_FacilityId)
+    ORDER BY VisitDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `visits_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_DoctorId BIGINT UNSIGNED,
+    IN p_FacilityId BIGINT UNSIGNED,
+    IN p_VisitDate DATETIME,
+    IN p_Reason VARCHAR(255),
+    IN p_Notes TEXT,
+    IN p_Weight DECIMAL(5,2),
+    IN p_BloodPressure VARCHAR(20),
+    IN p_Temperature DECIMAL(4,1),
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE visits
+    SET
+        PatientId = p_PatientId,
+        DoctorId = p_DoctorId,
+        FacilityId = p_FacilityId,
+        VisitDate = p_VisitDate,
+        Reason = p_Reason,
+        Notes = p_Notes,
+        Weight = p_Weight,
+        BloodPressure = p_BloodPressure,
+        Temperature = p_Temperature
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `vitals` (
+  `Id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `VisitId` bigint(20) unsigned NOT NULL,
+  `PatientId` bigint(20) unsigned NOT NULL,
+  `RecordedAt` datetime NOT NULL,
+  `Systolic` int(10) unsigned DEFAULT NULL,
+  `Diastolic` int(10) unsigned DEFAULT NULL,
+  `Pulse` int(10) unsigned DEFAULT NULL,
+  `Oxygen` int(10) unsigned DEFAULT NULL,
+  `Temperature` decimal(4,1) DEFAULT NULL,
+  `Weight` decimal(5,2) DEFAULT NULL,
+  `Notes` text DEFAULT NULL,
+  PRIMARY KEY (`Id`),
+  KEY `IX_Vitals_VisitId` (`VisitId`),
+  KEY `IX_Vitals_PatientId` (`PatientId`),
+  CONSTRAINT `FK_Vitals_Patients` FOREIGN KEY (`PatientId`) REFERENCES `patients` (`Id`),
+  CONSTRAINT `FK_Vitals_Visits` FOREIGN KEY (`VisitId`) REFERENCES `visits` (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `vitals_delete`(
+    IN p_Id BIGINT UNSIGNED,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM vitals
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `vitals_get`(
+    IN p_Id BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM vitals
+    WHERE Id = p_Id;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `vitals_insert`(
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_RecordedAt DATETIME,
+    IN p_Systolic INT UNSIGNED,
+    IN p_Diastolic INT UNSIGNED,
+    IN p_Pulse INT UNSIGNED,
+    IN p_Oxygen INT UNSIGNED,
+    IN p_Temperature DECIMAL(4,1),
+    IN p_Weight DECIMAL(5,2),
+    IN p_Notes TEXT,
+    OUT p_NewId BIGINT UNSIGNED
+)
+BEGIN
+    SET p_NewId = NULL;
+
+    INSERT INTO vitals (
+        VisitId, PatientId, RecordedAt,
+        Systolic, Diastolic, Pulse, Oxygen,
+        Temperature, Weight, Notes
+    )
+    VALUES (
+        p_VisitId, p_PatientId, p_RecordedAt,
+        p_Systolic, p_Diastolic, p_Pulse, p_Oxygen,
+        p_Temperature, p_Weight, p_Notes
+    );
+
+    SET p_NewId = LAST_INSERT_ID();
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `vitals_list_all`()
+BEGIN
+    SELECT *
+    FROM vitals
+    ORDER BY RecordedAt DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `vitals_list_by_patient`(
+    IN p_PatientId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM vitals
+    WHERE PatientId = p_PatientId
+    ORDER BY RecordedAt DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `vitals_list_by_visit`(
+    IN p_VisitId BIGINT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM vitals
+    WHERE VisitId = p_VisitId
+    ORDER BY RecordedAt DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `vitals_search`(
+    IN p_StartDate DATETIME,
+    IN p_EndDate DATETIME,
+    IN p_MinSystolic INT UNSIGNED,
+    IN p_MaxSystolic INT UNSIGNED,
+    IN p_MinOxygen INT UNSIGNED,
+    IN p_MaxOxygen INT UNSIGNED
+)
+BEGIN
+    SELECT *
+    FROM vitals
+    WHERE (p_StartDate IS NULL OR RecordedAt >= p_StartDate)
+      AND (p_EndDate IS NULL OR RecordedAt <= p_EndDate)
+      AND (p_MinSystolic IS NULL OR Systolic >= p_MinSystolic)
+      AND (p_MaxSystolic IS NULL OR Systolic <= p_MaxSystolic)
+      AND (p_MinOxygen IS NULL OR Oxygen >= p_MinOxygen)
+      AND (p_MaxOxygen IS NULL OR Oxygen <= p_MaxOxygen)
+    ORDER BY RecordedAt DESC, Id DESC;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `vitals_update`(
+    IN p_Id BIGINT UNSIGNED,
+    IN p_VisitId BIGINT UNSIGNED,
+    IN p_PatientId BIGINT UNSIGNED,
+    IN p_RecordedAt DATETIME,
+    IN p_Systolic INT UNSIGNED,
+    IN p_Diastolic INT UNSIGNED,
+    IN p_Pulse INT UNSIGNED,
+    IN p_Oxygen INT UNSIGNED,
+    IN p_Temperature DECIMAL(4,1),
+    IN p_Weight DECIMAL(5,2),
+    IN p_Notes TEXT,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE vitals
+    SET
+        VisitId = p_VisitId,
+        PatientId = p_PatientId,
+        RecordedAt = p_RecordedAt,
+        Systolic = p_Systolic,
+        Diastolic = p_Diastolic,
+        Pulse = p_Pulse,
+        Oxygen = p_Oxygen,
+        Temperature = p_Temperature,
+        Weight = p_Weight,
+        Notes = p_Notes
+    WHERE Id = p_Id;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+CREATE TABLE IF NOT EXISTS `zip_codes` (
+  `ZipCode` int(5) unsigned zerofill NOT NULL,
+  `City` varchar(64) NOT NULL,
+  `State` char(2) NOT NULL,
+  `County` varchar(64) DEFAULT NULL,
+  `GeoLocation` point NOT NULL,
+  PRIMARY KEY (`ZipCode`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `zip_codes_delete`(
+    IN p_ZipCode INT(5) UNSIGNED ZEROFILL,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    DELETE FROM zip_codes
+    WHERE ZipCode = p_ZipCode;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `zip_codes_get`(
+    IN p_ZipCode INT(5) UNSIGNED ZEROFILL
+)
+BEGIN
+    SELECT *
+    FROM zip_codes
+    WHERE ZipCode = p_ZipCode;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `zip_codes_insert`(
+    IN p_ZipCode INT(5) UNSIGNED ZEROFILL,
+    IN p_City VARCHAR(64),
+    IN p_State CHAR(2),
+    IN p_County VARCHAR(64),
+    IN p_GeoLocation POINT,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    INSERT INTO zip_codes (
+        ZipCode, City, State, County, GeoLocation
+    )
+    VALUES (
+        p_ZipCode, p_City, p_State, p_County, p_GeoLocation
+    );
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `zip_codes_list_all`()
+BEGIN
+    SELECT *
+    FROM zip_codes
+    ORDER BY ZipCode;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `zip_codes_search`(
+    IN p_City VARCHAR(64),
+    IN p_State CHAR(2),
+    IN p_County VARCHAR(64)
+)
+BEGIN
+    SELECT *
+    FROM zip_codes
+    WHERE (p_City IS NULL OR City LIKE CONCAT('%', p_City, '%'))
+      AND (p_State IS NULL OR State = p_State)
+      AND (p_County IS NULL OR County LIKE CONCAT('%', p_County, '%'))
+    ORDER BY ZipCode;
+END//
+DELIMITER ;
+
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `zip_codes_update`(
+    IN p_ZipCode INT(5) UNSIGNED ZEROFILL,
+    IN p_City VARCHAR(64),
+    IN p_State CHAR(2),
+    IN p_County VARCHAR(64),
+    IN p_GeoLocation POINT,
+    OUT p_Success TINYINT
+)
+BEGIN
+    SET p_Success = 0;
+
+    UPDATE zip_codes
+    SET
+        City = p_City,
+        State = p_State,
+        County = p_County,
+        GeoLocation = p_GeoLocation
+    WHERE ZipCode = p_ZipCode;
+
+    IF ROW_COUNT() > 0 THEN
+        SET p_Success = 1;
+    END IF;
+END//
+DELIMITER ;
+
+DROP TABLE IF EXISTS `patient_primary_emergency_contact_view`;
+CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `patient_primary_emergency_contact_view` AS SELECT 
+    ec.Id AS Id,
+    ec.PatientId AS PatientId,
+    ec.FirstName AS FirstName,
+    ec.LastName AS LastName,
+    ec.Relationship AS Relationship,
+    ec.Priority AS Priority,
+    ec.PhonePrimary AS PhonePrimary,
+    ec.PhoneSecondary AS PhoneSecondary,
+    ec.Email AS Email,
+    ec.AddressLine1 AS AddressLine1,
+    ec.AddressLine2 AS AddressLine2,
+    ec.City AS City,
+    ec.State AS State,
+    ec.PostalCode AS PostalCode,
+    ec.Notes AS Notes
+FROM emergency_contacts ec
+JOIN (
+    SELECT 
+        emergency_contacts.PatientId AS PatientId,
+        MIN(emergency_contacts.Priority) AS TopPriority
+    FROM emergency_contacts
+    GROUP BY emergency_contacts.PatientId
+) x 
+    ON x.PatientId = ec.PatientId 
+   AND x.TopPriority = ec.Priority 
+;
+
+/*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
+/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
+/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;

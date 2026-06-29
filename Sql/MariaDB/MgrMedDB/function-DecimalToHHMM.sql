@@ -1,0 +1,46 @@
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+DROP FUNCTION IF EXISTS `DecimalToHHMM`;
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` FUNCTION `DecimalToHHMM`(p_Hours DECIMAL(4,2)) RETURNS varchar(10) CHARSET utf8mb4
+    DETERMINISTIC
+BEGIN
+    DECLARE v_hours INT DEFAULT 0;
+    DECLARE v_minutes INT DEFAULT 0;
+    DECLARE v_result VARCHAR(10) DEFAULT NULL;
+
+    IF p_Hours IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    
+    SET v_hours = FLOOR(p_Hours);
+
+    
+    SET v_minutes = ROUND((p_Hours - v_hours) * 60);
+
+    
+    IF v_minutes = 60 THEN
+        SET v_minutes = 0;
+        SET v_hours = v_hours + 1;
+    END IF;
+
+    
+    SET v_result = LPAD(v_hours, 2, '0') + ':' + LPAD(v_minutes, 2, '0');
+
+    RETURN v_result;
+END//
+DELIMITER ;
+
+/*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
+/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
+/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;

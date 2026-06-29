@@ -1,0 +1,35 @@
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+DROP PROCEDURE IF EXISTS `troop_tracking_search`;
+DELIMITER //
+CREATE DEFINER=`root`@`localhost` PROCEDURE `troop_tracking_search`(
+    IN p_Phase VARCHAR(20),
+    IN p_StartDate DATETIME,
+    IN p_EndDate DATETIME,
+    IN p_MinAmount DECIMAL(10,2),
+    IN p_MaxAmount DECIMAL(10,2)
+)
+BEGIN
+    SELECT *
+    FROM troop_tracking
+    WHERE (p_Phase IS NULL OR Phase = p_Phase)
+      AND (p_StartDate IS NULL OR AppliedDate >= p_StartDate)
+      AND (p_EndDate IS NULL OR AppliedDate <= p_EndDate)
+      AND (p_MinAmount IS NULL OR AmountApplied >= p_MinAmount)
+      AND (p_MaxAmount IS NULL OR AmountApplied <= p_MaxAmount)
+    ORDER BY AppliedDate DESC, Id DESC;
+END//
+DELIMITER ;
+
+/*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
+/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
+/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;
