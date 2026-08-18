@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcDatabaseEditor.cs
  * File: UcDatabaseEditor.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: 2026-05-12
- * Modified: 2026-05-13
+ * Modified: 2026-08-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -50,6 +50,7 @@ namespace ToolsUI.UserControls
         public UcDatabaseEditor()
         {
             InitializeComponent();
+            Initialize();
         }
         #endregion
         #region Public Properties/Methods
@@ -166,6 +167,39 @@ namespace ToolsUI.UserControls
                 : $"{conn.Host}\\{conn.Instance}";
 
             return $"Server={instance};Database={conn.Schema};User Id={conn.User};Password={password};TrustServerCertificate=True;";
+        }
+        private void EditPassword()
+        {
+            var editor = new UcPasswordEditor
+            {
+                CurrentSettings = CurrentSettings
+            };
+
+            editor.Initialize(PasswordTarget.Database, _conn.ConnectionId);
+
+            editor.RefreshRequested += (s, e) =>
+            {
+                // Reload resolved password
+                var meta = _conn.Password;
+                txtPassword.Text = ResolvePassword(meta);
+                RequestRefresh();
+            };
+
+            using (var frm = new Form())
+            {
+                frm.Text = "Edit Password";
+                frm.Width = 600;
+                frm.Height = 400;
+                editor.Dock = DockStyle.Fill;
+                frm.Controls.Add(editor);
+                frm.StartPosition = FormStartPosition.CenterParent;   // ⭐ THIS LINE 
+                frm.ShowDialog();
+            }
+        }
+        private void Initialize()
+        {
+            txtPassword.ReadOnly = true;
+            txtPassword.Click += (s, e) => EditPassword();
         }
         private void ReloadMetadata()
         {

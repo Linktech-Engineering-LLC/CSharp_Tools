@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcLoggerEditor.Designer.cs
  * File: UcLoggerEditor.Designer.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: 2026-06-05
- * Modified: 2026-06-05
+ * Modified: 2026-08-18
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -49,6 +49,7 @@ namespace ToolsUI.UserControls
         {
             components = new System.ComponentModel.Container();
             pnlRoot = new Panel();
+            btnUpdate = new Button();
             grpLocations = new GroupBox();
             txtArchiveDirectory = new TextBox();
             label3 = new Label();
@@ -81,14 +82,26 @@ namespace ToolsUI.UserControls
             // pnlRoot
             // 
             pnlRoot.AutoSize = true;
+            pnlRoot.Controls.Add(btnUpdate);
             pnlRoot.Controls.Add(grpLocations);
             pnlRoot.Controls.Add(grpOptions);
             pnlRoot.Controls.Add(grpRotation);
             pnlRoot.Controls.Add(grpBehavior);
             pnlRoot.Location = new Point(3, 3);
             pnlRoot.Name = "pnlRoot";
-            pnlRoot.Size = new Size(471, 325);
+            pnlRoot.Size = new Size(462, 367);
             pnlRoot.TabIndex = 0;
+            // 
+            // btnUpdate
+            // 
+            btnUpdate.Location = new Point(194, 328);
+            btnUpdate.Name = "btnUpdate";
+            btnUpdate.Size = new Size(75, 23);
+            btnUpdate.TabIndex = 4;
+            btnUpdate.Text = "&Update";
+            toolTip1.SetToolTip(btnUpdate, "Updates the Logger Information");
+            btnUpdate.UseVisualStyleBackColor = true;
+            btnUpdate.Click += btnUpdate_Click;
             // 
             // grpLocations
             // 
@@ -303,7 +316,7 @@ namespace ToolsUI.UserControls
             Controls.Add(pnlRoot);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             Name = "UcLoggerEditor";
-            Size = new Size(479, 336);
+            Size = new Size(479, 381);
             pnlRoot.ResumeLayout(false);
             grpLocations.ResumeLayout(false);
             grpLocations.PerformLayout();
@@ -341,5 +354,6 @@ namespace ToolsUI.UserControls
         private Label label7;
         private GroupBox grpOptions;
         private CheckedListBox clbOptions;
+        private Button btnUpdate;
     }
 }
