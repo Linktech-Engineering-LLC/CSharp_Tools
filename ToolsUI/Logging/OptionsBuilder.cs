@@ -1,10 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: ToolsUI
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Logging/OptionsBuilder.cs
  * File: OptionsBuilder.cs
+ * Version: 1.0.1
  * Created: None
- * Modified: 2026-04-01
+ * Modified: 2026-08-21
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -18,6 +26,7 @@ using System.Threading.Tasks;
 using Tools.Logging;
 #endregion
 #region Project Libraries
+using Tools.Config;
 using Tools.Logging;
 using ToolsUI.Helpers;
 #endregion

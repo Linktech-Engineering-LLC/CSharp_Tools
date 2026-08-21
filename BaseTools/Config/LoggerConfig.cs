@@ -10,9 +10,9 @@
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Config/LoggerConfig.cs
  * File: LoggerConfig.cs
- * Version: 1.0.3
+ * Version: 1.0.4
  * Created: 2026-06-05
- * Modified: 2026-06-05
+ * Modified: 2026-08-21
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -26,46 +26,10 @@ using System.Threading.Tasks;
 using Tools.Logging;
 #endregion
 #region Project Libraries
+using Tools.Logging;
 #endregion
 namespace Tools.Config
 {
-    public enum ArchiveType
-    {
-        Daily,
-        Monthly,
-        Annual
-    }
-    public enum LogFormat
-    {
-        PlainText,
-        Json,
-        Xml
-    }
-    public enum LogLevel
-    {
-        Trace,
-        Debug,
-        Info,
-        Warning,
-        Error,
-        Critical,
-        Audit
-    }
-    public enum LoggerOption
-    {
-        EnableCompression,
-        AutoRotateLogs,
-        IncludeRawLogs,
-        VerboseArchiveLogging
-    }
-    public enum RotationType
-    {
-        SizeBased,
-        TimeBased,
-        CountBased,
-        None
-    }
-
     public class LoggerConfig
     {
         public AppPath LogDirectory { get; set; }

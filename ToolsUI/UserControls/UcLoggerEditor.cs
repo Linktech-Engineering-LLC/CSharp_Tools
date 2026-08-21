@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcLoggerEditor.cs
  * File: UcLoggerEditor.cs
- * Version: 1.0.5
+ * Version: 1.0.7
  * Created: 2026-06-05
- * Modified: 2026-08-18
+ * Modified: 2026-08-21
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -30,6 +30,8 @@ using System.Windows.Forms;
 #endregion
 #region Project Libraries
 using Tools.Config;
+using Tools.Logging;
+using Tools.Enums;
 #endregion
 namespace ToolsUI.UserControls
 {
@@ -43,6 +45,10 @@ namespace ToolsUI.UserControls
         public UcLoggerEditor()
         {
             InitializeComponent();
+            cboSize.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboSize.DataSource = Enum.GetValues(typeof(SizeUnit));
+            cboRetention.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboRetention.DataSource = Enum.GetValues(typeof(RetentionUnit));
             Initialize();
         }
         #endregion
@@ -112,12 +118,51 @@ namespace ToolsUI.UserControls
             if (_config.ArchivePath != null)
                 _config.ArchivePath.PathValue = txtArchiveDirectory.Text;
 
-            _config.RetentionDays = Convert.ToInt32(txtRetentionDays.Text);
-            _config.MaxLogSizeBytes = Convert.ToInt64(txtMaxLogSizeBytes.Text);
+            long sizeBytes = ParseLogSize(
+                (long)numMaxLogSize.Value,
+                (SizeUnit)cboSize.SelectedItem
+            );
+
+            int retentionDays = ParseRetention(
+                (int)numRetention.Value,
+                (RetentionUnit)cboRetention.SelectedItem
+            );
+
+            _config.MaxLogSizeBytes = sizeBytes;
+            _config.RetentionDays = retentionDays;
 
             _config.Options.Clear();
             foreach (var item in clbOptions.CheckedItems)
                 _config.Options.Add((LoggerOption)item);
+        }
+        public static (long Value, SizeUnit Unit) FormatLogSize(long bytes)
+        {
+            if (bytes % (1024L * 1024L * 1024L * 1024L) == 0)
+                return (bytes / (1024L * 1024L * 1024L * 1024L), SizeUnit.T);
+
+            if (bytes % (1024L * 1024L * 1024L) == 0)
+                return (bytes / (1024L * 1024L * 1024L), SizeUnit.G);
+
+            if (bytes % (1024L * 1024L) == 0)
+                return (bytes / (1024L * 1024L), SizeUnit.M);
+
+            if (bytes % 1024L == 0)
+                return (bytes / 1024L, SizeUnit.K);
+
+            return (bytes, SizeUnit.B);
+        }
+        public static (int Value, RetentionUnit Unit) FormatRetention(int days)
+        {
+            if (days % 365 == 0)
+                return (days / 365, RetentionUnit.Years);
+
+            if (days % 30 == 0)
+                return (days / 30, RetentionUnit.Months);
+
+            if (days % 7 == 0)
+                return (days / 7, RetentionUnit.Weeks);
+
+            return (days, RetentionUnit.Days);
         }
 
         public void Initialize(LoggerConfig settings)
@@ -141,8 +186,13 @@ namespace ToolsUI.UserControls
             txtArchiveDirectory.Text = _config.ArchivePath?.PathValue ?? "";
 
             // Populate numeric fields
-            txtRetentionDays.Text = _config.RetentionDays.ToString();
-            txtMaxLogSizeBytes.Text = _config.MaxLogSizeBytes.ToString();
+            var sizeInfo = FormatLogSize(_config.MaxLogSizeBytes);
+            numMaxLogSize.Value = sizeInfo.Value;
+            cboSize.SelectedItem = sizeInfo.Unit;
+
+            var retentionInfo = FormatRetention(_config.RetentionDays);
+            numRetention.Value = retentionInfo.Value;
+            cboRetention.SelectedItem = retentionInfo.Unit;
 
             // Populate options
             for (int i = 0; i < clbOptions.Items.Count; i++)
@@ -150,6 +200,29 @@ namespace ToolsUI.UserControls
                 var opt = (LoggerOption)clbOptions.Items[i];
                 clbOptions.SetItemChecked(i, _config.Options.Contains(opt));
             }
+        }
+        public static long ParseLogSize(long value, SizeUnit unit)
+        {
+            return unit switch
+            {
+                SizeUnit.B => value,
+                SizeUnit.K => value * 1024L,
+                SizeUnit.M => value * 1024L * 1024L,
+                SizeUnit.G => value * 1024L * 1024L * 1024L,
+                SizeUnit.T => value * 1024L * 1024L * 1024L * 1024L,
+                _ => throw new ArgumentOutOfRangeException(nameof(unit))
+            };
+        }
+        public static int ParseRetention(int value, RetentionUnit unit)
+        {
+            return unit switch
+            {
+                RetentionUnit.Days => value,
+                RetentionUnit.Weeks => value * 7,
+                RetentionUnit.Months => value * 30,   // deterministic, avoids calendar complexity
+                RetentionUnit.Years => value * 365,
+                _ => throw new ArgumentOutOfRangeException(nameof(unit))
+            };
         }
 
         #endregion

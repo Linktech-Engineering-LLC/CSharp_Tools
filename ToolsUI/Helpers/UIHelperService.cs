@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Helpers/UIHelperService.cs
  * File: UIHelperService.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: 2026-03-31
- * Modified: 2026-06-05
+ * Modified: 2026-08-21
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -29,6 +29,7 @@ using Tools.Logging;
 using ToolsUI.Logging;
 #endregion
 #region Project Libraries
+using Tools.Config;
 #endregion
 namespace ToolsUI.Helpers
 {

@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Logging/ArchiveBinder.cs
  * File: ArchiveBinder.cs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Created: None
- * Modified: 2026-06-05
+ * Modified: 2026-08-21
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -25,6 +25,7 @@ using System.Text;
 using System.Threading.Tasks;
 #endregion
 #region Project Libraries
+using Tools.Config;
 using Tools.Logging;
 using ToolsUI.Helpers;
 #endregion

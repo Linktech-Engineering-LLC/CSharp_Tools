@@ -1,10 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: ToolsUI
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Files/FilerUI.cs
  * File: FilerUI.cs
+ * Version: 1.0.1
  * Created: 2026-01-07
- * Modified: 2026-01-31
+ * Modified: 2026-08-21
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -64,7 +72,7 @@ namespace ToolsUI.Files
         public string SelectCsvFile(string title) => SelectFile(title, Filer.CSV_FILTER, cfg.DataPath);
         public string SelectLogFile(string title)
         {
-            string logDir = lgr.Config.LogDirectory;
+            string logDir = lgr.Config.LogDirectory.PathValue;
 
             return SelectFile(title, Filer.LOG_FILTER, logDir);
         }

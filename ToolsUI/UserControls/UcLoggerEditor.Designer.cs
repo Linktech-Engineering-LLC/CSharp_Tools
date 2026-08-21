@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcLoggerEditor.Designer.cs
  * File: UcLoggerEditor.Designer.cs
- * Version: 1.0.2
+ * Version: 1.0.3
  * Created: 2026-06-05
- * Modified: 2026-08-18
+ * Modified: 2026-08-19
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -60,11 +60,13 @@ namespace ToolsUI.UserControls
             grpOptions = new GroupBox();
             clbOptions = new CheckedListBox();
             grpRotation = new GroupBox();
+            numRetention = new ToolsUI.Controls.NumericTextBox();
+            numMaxLogSize = new ToolsUI.Controls.NumericTextBox();
+            cboRetention = new ComboBox();
+            cboSize = new ComboBox();
             cboArchiveType = new ComboBox();
             label8 = new Label();
-            txtRetentionDays = new TextBox();
             label7 = new Label();
-            txtMaxLogSizeBytes = new TextBox();
             label6 = new Label();
             cboRotationType = new ComboBox();
             label5 = new Label();
@@ -185,32 +187,88 @@ namespace ToolsUI.UserControls
             // clbOptions
             // 
             clbOptions.FormattingEnabled = true;
-            clbOptions.Location = new Point(6, 19);
+            clbOptions.Location = new Point(7, 19);
             clbOptions.Name = "clbOptions";
             clbOptions.Size = new Size(166, 166);
             clbOptions.TabIndex = 7;
             // 
             // grpRotation
             // 
+            grpRotation.Controls.Add(numRetention);
+            grpRotation.Controls.Add(numMaxLogSize);
+            grpRotation.Controls.Add(cboRetention);
+            grpRotation.Controls.Add(cboSize);
             grpRotation.Controls.Add(cboArchiveType);
             grpRotation.Controls.Add(label8);
-            grpRotation.Controls.Add(txtRetentionDays);
             grpRotation.Controls.Add(label7);
-            grpRotation.Controls.Add(txtMaxLogSizeBytes);
             grpRotation.Controls.Add(label6);
             grpRotation.Controls.Add(cboRotationType);
             grpRotation.Controls.Add(label5);
-            grpRotation.Location = new Point(10, 184);
+            grpRotation.Location = new Point(4, 184);
             grpRotation.Name = "grpRotation";
-            grpRotation.Size = new Size(259, 137);
+            grpRotation.Size = new Size(271, 137);
             grpRotation.TabIndex = 2;
             grpRotation.TabStop = false;
             grpRotation.Text = "Rotation Settings";
             // 
+            // numRetention
+            // 
+            numRetention.AllowDecimal = false;
+            numRetention.AllowNegative = false;
+            numRetention.Borderless = false;
+            numRetention.BorderStyle = BorderStyle.FixedSingle;
+            numRetention.DarkMode = false;
+            numRetention.IntValue = 0;
+            numRetention.Location = new Point(106, 74);
+            numRetention.Maximum = new decimal(new int[] { 3650, 0, 0, 0 });
+            numRetention.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            numRetention.Name = "numRetention";
+            numRetention.Placeholder = "";
+            numRetention.Size = new Size(100, 23);
+            numRetention.TabIndex = 11;
+            numRetention.Text = "0";
+            numRetention.Value = new decimal(new int[] { 0, 0, 0, 0 });
+            // 
+            // numMaxLogSize
+            // 
+            numMaxLogSize.AllowDecimal = false;
+            numMaxLogSize.AllowNegative = false;
+            numMaxLogSize.Borderless = false;
+            numMaxLogSize.BorderStyle = BorderStyle.FixedSingle;
+            numMaxLogSize.DarkMode = false;
+            numMaxLogSize.IntValue = 0;
+            numMaxLogSize.Location = new Point(105, 45);
+            numMaxLogSize.Maximum = new decimal(new int[] { 1000000, 0, 0, 0 });
+            numMaxLogSize.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            numMaxLogSize.Name = "numMaxLogSize";
+            numMaxLogSize.Placeholder = "";
+            numMaxLogSize.Size = new Size(100, 23);
+            numMaxLogSize.TabIndex = 10;
+            numMaxLogSize.Text = "0";
+            numMaxLogSize.Value = new decimal(new int[] { 0, 0, 0, 0 });
+            // 
+            // cboRetention
+            // 
+            cboRetention.FormattingEnabled = true;
+            cboRetention.Items.AddRange(new object[] { "Days", "Weeks", "Months", "Years" });
+            cboRetention.Location = new Point(211, 74);
+            cboRetention.Name = "cboRetention";
+            cboRetention.Size = new Size(54, 23);
+            cboRetention.TabIndex = 9;
+            // 
+            // cboSize
+            // 
+            cboSize.FormattingEnabled = true;
+            cboSize.Items.AddRange(new object[] { "B", "K", "M", "G", "T" });
+            cboSize.Location = new Point(211, 45);
+            cboSize.Name = "cboSize";
+            cboSize.Size = new Size(54, 23);
+            cboSize.TabIndex = 8;
+            // 
             // cboArchiveType
             // 
             cboArchiveType.FormattingEnabled = true;
-            cboArchiveType.Location = new Point(122, 103);
+            cboArchiveType.Location = new Point(104, 103);
             cboArchiveType.Name = "cboArchiveType";
             cboArchiveType.Size = new Size(121, 23);
             cboArchiveType.TabIndex = 7;
@@ -226,44 +284,28 @@ namespace ToolsUI.UserControls
             label8.TabIndex = 6;
             label8.Text = "Archive Type";
             // 
-            // txtRetentionDays
-            // 
-            txtRetentionDays.Location = new Point(143, 74);
-            txtRetentionDays.Name = "txtRetentionDays";
-            txtRetentionDays.Size = new Size(100, 23);
-            txtRetentionDays.TabIndex = 5;
-            txtRetentionDays.Tag = "RetentionDays";
-            // 
             // label7
             // 
             label7.AutoSize = true;
             label7.Location = new Point(8, 78);
             label7.Name = "label7";
-            label7.Size = new Size(92, 15);
+            label7.Size = new Size(63, 15);
             label7.TabIndex = 4;
-            label7.Text = "Retention Days";
-            // 
-            // txtMaxLogSizeBytes
-            // 
-            txtMaxLogSizeBytes.Location = new Point(143, 45);
-            txtMaxLogSizeBytes.Name = "txtMaxLogSizeBytes";
-            txtMaxLogSizeBytes.Size = new Size(100, 23);
-            txtMaxLogSizeBytes.TabIndex = 3;
-            txtMaxLogSizeBytes.Tag = "MaxLogSize";
+            label7.Text = "Retention";
             // 
             // label6
             // 
             label6.AutoSize = true;
             label6.Location = new Point(8, 49);
             label6.Name = "label6";
-            label6.Size = new Size(121, 15);
+            label6.Size = new Size(80, 15);
             label6.TabIndex = 2;
-            label6.Text = "Max Log Size (bytes)";
+            label6.Text = "Max Log Size";
             // 
             // cboRotationType
             // 
             cboRotationType.FormattingEnabled = true;
-            cboRotationType.Location = new Point(122, 16);
+            cboRotationType.Location = new Point(104, 16);
             cboRotationType.Name = "cboRotationType";
             cboRotationType.Size = new Size(121, 23);
             cboRotationType.TabIndex = 1;
@@ -344,16 +386,18 @@ namespace ToolsUI.UserControls
         private ComboBox cboMinimumLevel;
         private Label label4;
         private GroupBox grpRotation;
-        private TextBox txtMaxLogSizeBytes;
         private Label label6;
         private ComboBox cboRotationType;
         private Label label5;
         private ComboBox cboArchiveType;
         private Label label8;
-        private TextBox txtRetentionDays;
         private Label label7;
         private GroupBox grpOptions;
         private CheckedListBox clbOptions;
         private Button btnUpdate;
+        private ComboBox cboSize;
+        private ComboBox cboRetention;
+        private Controls.NumericTextBox numRetention;
+        private Controls.NumericTextBox numMaxLogSize;
     }
 }

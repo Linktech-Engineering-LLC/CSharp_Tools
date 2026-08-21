@@ -1,10 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: BaseTools
  * Program: BaseTools.dll
  * Path: Tools/BaseTools/Logging/Logger.cs
  * File: Logger.cs
+ * Version: 1.0.1
  * Created: 2025-12-29
- * Modified: 2026-03-31
+ * Modified: 2026-08-21
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -17,6 +25,7 @@ using System.IO.Compression;
 #endregion
 #region Project Libraries
 using Tools.Helpers;
+using Tools.Config;
 #endregion
 
 namespace Tools.Logging
@@ -65,22 +74,26 @@ namespace Tools.Logging
         public Logger(string appname, LoggerConfig cfg)
         {
             Config = cfg;
-            Config.LogFileName = appname + ".log";
-            Config.AppName = appname;
-            // Ensure the directory exists
-            Directory.CreateDirectory(Config.LogDirectory);
+
+            AppName = appname;
+            LogFileName = appname + ".log";
+
+            Directory.CreateDirectory(Config.LogDirectory.PathValue);
         }
         #endregion
         #region Public Properties
         public LoggerConfig Config { get; }
+        public string AppName { get; }
+        public string LogFileName { get; set; }
+        public string FullLogPath => Path.Combine(Config.LogDirectory.PathValue, LogFileName);
         #endregion
         #region Private Methods
         private string BuildArchiveName(ArchiveType type, DateTime? dt = null)
         {
             DateTime ts = dt ?? DateTime.Now;
 
-            string dailyBase = Path.GetFileNameWithoutExtension(Config.LogFileName);
-            string periodicBase = Config.AppName;
+            string dailyBase = Path.GetFileNameWithoutExtension(LogFileName);
+            string periodicBase = AppName;
             bool compressed = Config.Options.Contains(LoggerOption.EnableCompression);
 
             return type switch
@@ -184,18 +197,18 @@ namespace Tools.Logging
         private void Flush()
         {
             // Ensure the file exists before archiving
-            if (!File.Exists(Config.FullLogPath))
-                using (File.Create(Config.FullLogPath)) { }
+            if (!File.Exists(FullLogPath))
+                using (File.Create(FullLogPath)) { }
         }
         private string GetArchiveDirectory()
         {
-            Directory.CreateDirectory(Config.ArchivePath);
-            return Config.ArchivePath;
+            Directory.CreateDirectory(Config.ArchivePath.PathValue);
+            return Config.ArchivePath.PathValue;
         }
         private IEnumerable<string> GetDailyArchives()
         {
-            string archiveDir = Config.ArchivePath;
-            string dailyBase = Path.GetFileNameWithoutExtension(Config.LogFileName);
+            string archiveDir = Config.ArchivePath.PathValue;
+            string dailyBase = Path.GetFileNameWithoutExtension(LogFileName);
 
             // Matches:
             //   Medical_YYYYMMDD.log
@@ -222,14 +235,14 @@ namespace Tools.Logging
         }
         private IEnumerable<string> GetDailyArchivesForMonth(string rollupPath)
         {
-            string archiveDir = Config.ArchivePath;
+            string archiveDir = Config.ArchivePath.PathValue;
 
             // Extract YYYYMM from the rollup file name
             string name = Path.GetFileNameWithoutExtension(rollupPath);
             string[] parts = name.Split('_');
             string yearMonth = parts[^1]; // e.g., "202602"
 
-            string dailyBase = Path.GetFileNameWithoutExtension(Config.LogFileName);
+            string dailyBase = Path.GetFileNameWithoutExtension(LogFileName);
 
             return Directory.EnumerateFiles(archiveDir)
                 .Where(f =>
@@ -257,14 +270,14 @@ namespace Tools.Logging
         }
         private IEnumerable<string> GetMonthlyArchivesForYear(string rollupPath)
         {
-            string archiveDir = Config.ArchivePath;
+            string archiveDir = Config.ArchivePath.PathValue;
 
             // Extract YYYY from the rollup file name
             string name = Path.GetFileNameWithoutExtension(rollupPath);
             string[] parts = name.Split('_');
             string year = parts[^1]; // e.g., "2026"
 
-            string periodicBase = Config.AppName;
+            string periodicBase = AppName;
 
             return Directory.EnumerateFiles(archiveDir, $"{periodicBase}_*.zip")
                 .Where(f =>
@@ -298,14 +311,14 @@ namespace Tools.Logging
             if (isDaily)
             {
                 // Move the active log to the archive
-                File.Move(Config.FullLogPath, archivePath);
+                File.Move(FullLogPath, archivePath);
 
                 // Compress if enabled and extension is .zip
                 if (Config.Options.Contains(LoggerOption.EnableCompression) && archivePath.EndsWith(".zip"))
                     CompressFile(archivePath);
 
                 // Create a fresh empty active log
-                using (File.Create(Config.FullLogPath)) { }
+                using (File.Create(FullLogPath)) { }
 
                 Info(domain, $"Created {type.ToString().ToLowerInvariant()} archive: {archivePath}");
             }
@@ -323,10 +336,10 @@ namespace Tools.Logging
         }
         private void RotateIfNeeded()
         {
-            if (!File.Exists(Config.FullLogPath))
+            if (!File.Exists(FullLogPath))
                 return;
 
-            FileInfo fi = new(Config.FullLogPath);
+            FileInfo fi = new(FullLogPath);
 
             if (fi.Length >= Config.MaxLogSizeBytes)
                 Archive(ArchiveType.Daily);
@@ -353,7 +366,7 @@ namespace Tools.Logging
         }
         public long GetLogSize()
         {
-            string path = Config.FullLogPath;
+            string path = FullLogPath;
 
             if (!File.Exists(path))
                 return 0;
@@ -376,7 +389,7 @@ namespace Tools.Logging
         }
         public string ReadLog()
         {
-            string path = Config.FullLogPath;
+            string path = FullLogPath;
 
             if (!File.Exists(path))
                 return string.Empty;
@@ -388,11 +401,14 @@ namespace Tools.Logging
             fullPath = Path.GetFullPath(fullPath);
 
             // Split into directory + filename
-            Config.LogDirectory = Path.GetDirectoryName(fullPath)!;
-            Config.LogFileName = Path.GetFileName(fullPath);
+            string dir = Path.GetDirectoryName(fullPath)!;
+            string file = Path.GetFileName(fullPath);
+
+            Config.LogDirectory.PathValue = dir;
+            LogFileName = file;
 
             // Ensure directory exists
-            Directory.CreateDirectory(Config.LogDirectory);
+            Directory.CreateDirectory(dir);
 
             // Ensure file exists
             if (!File.Exists(fullPath))
@@ -400,16 +416,16 @@ namespace Tools.Logging
         }
         public void Write(string text)
         {
-            Directory.CreateDirectory(Config.LogDirectory);
+            Directory.CreateDirectory(Config.LogDirectory.PathValue);
             RotateIfNeeded();
-            File.AppendAllText(Config.FullLogPath, text);
+            File.AppendAllText(FullLogPath, text);
         }
 
         public void WriteLine(string text)
         {
-            Directory.CreateDirectory(Config.LogDirectory);
+            Directory.CreateDirectory(Config.LogDirectory.PathValue);
             RotateIfNeeded();
-            File.AppendAllText(Config.FullLogPath, text + Environment.NewLine);
+            File.AppendAllText(FullLogPath, text + Environment.NewLine);
         }
 
         #endregion

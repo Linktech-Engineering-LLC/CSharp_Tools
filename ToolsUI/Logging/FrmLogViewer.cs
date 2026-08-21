@@ -1,10 +1,18 @@
 /*
+ * Linktech Engineering Tools Suite
+ * (c) 2026 Leon McClatchey
+ * (c) 2026 Linktech Engineering, LLC
+ * Licensed under the MIT License.
+ */
+
+/*
  * Project: ToolsUI
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/Logging/FrmLogViewer.cs
  * File: FrmLogViewer.cs
+ * Version: 1.0.1
  * Created: 2026-01-07
- * Modified: 2026-04-01
+ * Modified: 2026-08-21
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -17,6 +25,7 @@ using Microsoft.VisualBasic.Logging;
 #endregion
 #region Product Libraries
 using Tools.Helpers;
+using Tools.Config;
 using Tools.Logging;
 using ToolsUI.Logging;
 using ToolsUI.Files;
@@ -73,7 +82,7 @@ namespace ToolsUI
             {
                 RawLine = line,
                 Timestamp = DateTime.MinValue,
-                Domain = PathHelpers.NameWithoutExtension(lgr.Config.LogFileName),
+                Domain = PathHelpers.NameWithoutExtension(lgr.LogFileName),
                 PID = "",
                 Facility = "",
                 Severity = "UNKNOWN",
@@ -386,7 +395,7 @@ namespace ToolsUI
         }
         private void RefreshStructure()
         {
-            string log = lgr_cfg.FullLogPath;
+            string log = lgr.FullLogPath;
             DateTime mod = File.Exists(log)
                 ? new FileInfo(log).LastWriteTime
                 : DateTime.MinValue;
@@ -447,7 +456,11 @@ namespace ToolsUI
         }
         #endregion
         #region Constructors/Destructors
-        public FrmLogViewer(Logger logger, LoggerConfig config, FilerUI filerUI, string appname)
+        public FrmLogViewer(
+            Tools.Logging.Logger logger,
+            Tools.Config.LoggerConfig config,
+            FilerUI filerUI,
+            string appname)
         {
             InitializeComponent();
 
@@ -459,7 +472,6 @@ namespace ToolsUI
             lgr_cfg = config;
             filer = filerUI;
             Product = appname;
-            lgr_cfg.AppName = appname;
 
             uiHelper = new UIHelperService();
             optionsBinder = new OptionsBuilder(uiHelper);
