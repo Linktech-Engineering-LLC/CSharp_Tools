@@ -20,6 +20,7 @@
 #region System Libraries
 using System;
 using System.Drawing;
+using System.Security.Policy;
 using System.Windows.Forms;
 using Microsoft.VisualBasic.Logging;
 #endregion
@@ -27,11 +28,10 @@ using Microsoft.VisualBasic.Logging;
 using Tools.Helpers;
 using Tools.Config;
 using Tools.Logging;
-using ToolsUI.Logging;
 using ToolsUI.Files;
 using System.Globalization;
-using System.Security.Policy;
 using ToolsUI.Helpers;
+using System.Text.RegularExpressions;
 #endregion
 namespace ToolsUI
 {
@@ -50,15 +50,15 @@ namespace ToolsUI
         }
         #endregion
         #region Private Variables
-        private readonly ArchiveBinder archiveBinder;
         private readonly UIHelperService uiHelper = new();
-        private readonly OptionsBuilder optionsBinder;
         private readonly Logger lgr;
         private readonly LoggerConfig lgr_cfg;
         private readonly FilerUI filer;
         private List<LogEntry> _entries = [];
         private bool _inverted = false;
-        private bool _isSyncing = false;
+        private List<int> _rawMatches = new();
+        private int _rawMatchIndex = -1;
+        private readonly Color HighlightColor = Color.Yellow;
         #endregion
         #region Public Variables
         public string Found { get; set; } = string.Empty;
@@ -69,6 +69,7 @@ namespace ToolsUI
         public string Title { get; set; } = string.Empty;
         #endregion
         #region Private Methods
+
         private void DoArchive()
         {
             lgr.Archive(ArchiveType.Daily);
@@ -153,7 +154,21 @@ namespace ToolsUI
         }
         private void DoSearch()
         {
-            //ForRawOrStructured(SearchRaw, SearchStructured);
+            string term = txtSearch.Text.Trim();
+            if (string.IsNullOrEmpty(term))
+                return;
+
+            // RAW TAB
+            if (tabLogs.SelectedTab.Equals(pgeRaw))
+            {
+                ClearRawHighlights();
+                SearchRaw(term);
+                HighlightAllRawMatches(term);
+                return;
+            }
+
+            // STRUCTURED TAB
+            SearchStructured(term);
         }
         private void DgvLogs_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
         {
@@ -207,59 +222,10 @@ namespace ToolsUI
                     break;
             }
         }
-        private void ForRawOrStructured(Action rawAction, Action structuredAction)
-        {
-            if (IsRawTab)
-                rawAction();
-            else
-                structuredAction();
-        }
         private bool HasValidTimestamps()
         {
             return _entries.Any(e => e.Timestamp > DateTime.MinValue);
         }
-        private void HandleArchiveTypeItem(string optionText, CheckState newState)
-        {
-            // Only react when the item is being checked, not unchecked
-            if (newState != CheckState.Checked)
-                return;
-
-            // Convert the option text to the enum
-            if (Enum.TryParse(optionText, out ArchiveType type))
-            {
-                lgr_cfg.ArchiveType = type;
-                return;
-            }
-
-            // If something unexpected happens
-            lgr.Error($"{Product} LogViewer",
-                $"Unknown ArchiveType option '{optionText}'");
-        }
-        private void HandleOptionsItem(string optionText, CheckState newState)
-        {
-            bool value = (newState == CheckState.Checked);
-
-            switch (optionText)
-            {
-                case "Enable Compression":
-                    //lgr_cfg.Options.Contains(LoggerOption.EnableCompression) ?  = value;
-                    break;
-
-                case "Include Raw Logs":
-                    //lgr_cfg.IncludeRawLogs = value;
-                    break;
-
-                case "Verbose Archive Logging":
-                    //lgr_cfg.VerboseArchiveLogging = value;
-                    break;
-
-                default:
-                    lgr.Error($"{Product} LogViewer",
-                        $"Unknown option '{optionText}' in Options list");
-                    break;
-            }
-        }
-        private bool IsRawTab => tabLogs.SelectedIndex == 0;
         private bool IsStructuredLine(string line)
         {
             if (string.IsNullOrWhiteSpace(line) || line.Length < 19)
@@ -269,7 +235,6 @@ namespace ToolsUI
 
             return DateTime.TryParse(tsCandidate, out _);
         }
-        private bool IsStructuredTab => tabLogs.SelectedIndex == 1;
         private void LoadLog()
         {
             _entries.Clear();
@@ -303,9 +268,6 @@ namespace ToolsUI
             {
                 _entries.Reverse();
             }
-            lblFormatMode.Text = HasValidTimestamps() ? "Mode: Structured" : "Mode: Raw";
-            lblParsedCount.Text = $"Parsed: {_entries.Count(e => e.Timestamp > DateTime.MinValue)}";
-            lblFallbackCount.Text = $"Fallback: {_entries.Count(e => e.Timestamp == DateTime.MinValue)}";
         }
         private LogEntry? ParseLogLine(string line)
         {
@@ -428,7 +390,6 @@ namespace ToolsUI
                  modified: {mod.ToString("yyyy-MM-dd HH:mm:ss")}
                  attributes: {attrText})";
             Text = $"{Product} Application Log";
-            uiHelper.UpdateMetadataLabels(pnlMetaTags, lgr_cfg);
         }
         private void RefreshText()
         {
@@ -438,21 +399,164 @@ namespace ToolsUI
                 rtbLogs.AppendText(entry.RawLine + Environment.NewLine);
             }
         }
-        private void ResizeArchiveTypesList()
+        private bool SearchOption(string name)
         {
-            int itemHeight = clbArchiveTypes.ItemHeight;
-            int itemCount = clbArchiveTypes.Items.Count;
-
-            // Add a little padding so it doesn't look cramped
-            int padding = 4;
-
-            clbArchiveTypes.Height = (itemHeight * itemCount) + padding;
+            foreach (var item in clbSearchOptions.CheckedItems)
+            {
+                if (item.ToString() == name)
+                    return true;
+            }
+            return false;
         }
-        private void SyncAll(LoggerConfig cfg)
+        private void SearchRaw(string term)
         {
-            archiveBinder.SyncConfigToUI(cfg, pnlArchives);
-            optionsBinder.SyncConfigToUI(cfg, pnlOptions);
-            uiHelper.UpdateMetadataLabels(pnlMetaTags, cfg);
+            _rawMatches.Clear();
+            _rawMatchIndex = -1;
+
+            bool caseSensitive = SearchOption("Case Sensitive");
+            bool regex = SearchOption("Regex");
+            bool highlightAll = SearchOption("Highlight All");
+
+            string text = rtbLogs.Text;
+
+            if (regex)
+            {
+                var matches = Regex.Matches(
+                    text,
+                    term,
+                    caseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase);
+
+                foreach (Match m in matches)
+                    _rawMatches.Add(m.Index);
+            }
+            else
+            {
+                StringComparison cmp = caseSensitive
+                    ? StringComparison.Ordinal
+                    : StringComparison.OrdinalIgnoreCase;
+
+                int index = 0;
+                while (true)
+                {
+                    index = text.IndexOf(term, index, cmp);
+                    if (index < 0)
+                        break;
+
+                    _rawMatches.Add(index);
+                    index += term.Length;
+                }
+            }
+
+            if (_rawMatches.Count == 0)
+                return;
+
+            _rawMatchIndex = 0;
+
+            if (highlightAll)
+                HighlightAllRawMatches(term);
+
+            HighlightRawMatch();
+        }
+        private void ClearRawHighlights()
+        {
+            rtbLogs.Select(0, rtbLogs.Text.Length);
+            rtbLogs.SelectionBackColor = Color.White;
+
+            _rawMatches.Clear();
+            _rawMatchIndex = -1;
+        }
+        private void HighlightAllRawMatches(string term)
+        {
+            rtbLogs.Select(0, rtbLogs.Text.Length);
+            rtbLogs.SelectionBackColor = Color.White;
+
+            foreach (int index in _rawMatches)
+            {
+                rtbLogs.Select(index, term.Length);
+                rtbLogs.SelectionBackColor = HighlightColor;
+            }
+
+            HighlightRawMatch();
+        }
+        private void HighlightRawMatch()
+        {
+            if (_rawMatchIndex < 0 || _rawMatchIndex >= _rawMatches.Count)
+                return;
+
+            int start = _rawMatches[_rawMatchIndex];
+            int length = txtSearch.Text.Length;
+
+            rtbLogs.Select(start, length);
+            rtbLogs.ScrollToCaret();
+            rtbLogs.Focus();
+        }
+        private void FindNextRaw()
+        {
+            if (_rawMatches.Count == 0)
+                return;
+
+            _rawMatchIndex++;
+            if (_rawMatchIndex >= _rawMatches.Count)
+                _rawMatchIndex = 0;   // wrap around
+
+            HighlightRawMatch();
+        }
+        private void FindPrevRaw()
+        {
+            if (_rawMatches.Count == 0)
+                return;
+
+            _rawMatchIndex--;
+            if (_rawMatchIndex < 0)
+                _rawMatchIndex = _rawMatches.Count - 1;   // wrap around
+
+            HighlightRawMatch();
+        }
+        private void SearchStructured(string term)
+        {
+            // Wildcard reset
+            if (term == "*")
+            {
+                dgvLogs.DataSource = _entries;
+                return;
+            }
+
+            var matches = _entries
+                .Where(e => e.RawLine.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (matches.Count == 0)
+                return;
+
+            if (matches.Count == 1)
+            {
+                var entry = matches[0];
+                int index = _entries.IndexOf(entry);
+
+                dgvLogs.DataSource = _entries;   // ensure full list is shown
+                dgvLogs.ClearSelection();
+                dgvLogs.Rows[index].Selected = true;
+                dgvLogs.FirstDisplayedScrollingRowIndex = index;
+                return;
+            }
+
+            // Multiple matches → filter grid
+            dgvLogs.DataSource = matches;
+        }
+        private void ClearFilter()
+        {
+            // Restore full list
+            dgvLogs.DataSource = _entries;
+
+            // Optional: clear search box
+            txtSearch.Text = string.Empty;
+
+            // Optional: clear selection
+            dgvLogs.ClearSelection();
+            _rawMatches.Clear();
+            _rawMatchIndex = -1;
+
+            rtbLogs.Select(0, 0);   // remove highlight
         }
         #endregion
         #region Constructors/Destructors
@@ -474,17 +578,6 @@ namespace ToolsUI
             Product = appname;
 
             uiHelper = new UIHelperService();
-            optionsBinder = new OptionsBuilder(uiHelper);
-            archiveBinder = new ArchiveBinder(uiHelper);
-
-            // Populate UI lists
-            uiHelper.PopulateEnum<ArchiveType>(clbArchiveTypes);
-            uiHelper.PopulateEnum<LoggerOption>(clbOptions);
-
-            // Sync UI with config (replaces ALL old boolean-based code)
-            SyncAll(lgr_cfg);
-
-            ResizeArchiveTypesList();
 
             // Initial load of the log file
             LoadLog();
@@ -509,7 +602,17 @@ namespace ToolsUI
                     break;
 
                 case "Search":
-                    //DoSearch();
+                    DoSearch();
+                    break;
+                case "ClearFilter":
+                    ClearFilter();
+                    ClearRawHighlights();
+                    break;
+                case "FindNext":
+                    FindNextRaw();
+                    break;
+                case "FindPrev":
+                    FindPrevRaw();
                     break;
 
                 case "Invert":
@@ -528,63 +631,6 @@ namespace ToolsUI
                     Close();
                     break;
             }
-        }
-        private void CheckedListBox_ItemCheck(object sender, ItemCheckEventArgs e)
-        {
-            if (_isSyncing)
-                return;
-
-            if (sender is not CheckedListBox clb)
-                return;
-
-            string tag = clb.Tag?.ToString() ?? "";
-            string optionText = clb.Items[e.Index].ToString();
-
-            _isSyncing = true;
-
-            switch (tag)
-            {
-                case "LoggerOption":
-                    {
-                        var opt = Enum.Parse<LoggerOption>(optionText);
-
-                        if (e.NewValue == CheckState.Checked)
-                        {
-                            if (!lgr_cfg.Options.Contains(opt))
-                                lgr_cfg.Options.Add(opt);
-                        }
-                        else
-                        {
-                            lgr_cfg.Options.Remove(opt);
-                        }
-
-                        break;
-                    }
-
-                case "ArchiveType":
-                    {
-                        var at = Enum.Parse<ArchiveType>(optionText);
-                        lgr_cfg.ArchiveType = at;
-
-                        // enforce single-select safely
-                        for (int i = 0; i < clb.Items.Count; i++)
-                        {
-                            if (i != e.Index)
-                                clb.SetItemChecked(i, false);
-                        }
-
-                        break;
-                    }
-
-                default:
-                    lgr.Error($"{Product} LogViewer",
-                        $"Unknown CheckedListBox tag '{tag}' for option '{optionText}'");
-                    break;
-            }
-
-            _isSyncing = false;
-
-            RefreshStructure();
         }
         private void FrmLogViewer_FormClosing(object sender, FormClosingEventArgs e)
         {

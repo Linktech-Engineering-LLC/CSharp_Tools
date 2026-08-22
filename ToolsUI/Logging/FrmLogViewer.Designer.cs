@@ -43,9 +43,14 @@ namespace ToolsUI
         {
             components = new System.ComponentModel.Container();
             pnlControls = new Panel();
+            pnlSearch = new Panel();
+            btnPrevious = new Button();
+            btnNext = new Button();
+            btnClearFilter = new Button();
+            txtSearch = new TextBox();
+            btnSearch = new Button();
             btnClose = new Button();
             btnEmpty = new Button();
-            btnSearch = new Button();
             btnRefresh = new Button();
             btnArchive = new Button();
             btnInvert = new Button();
@@ -64,41 +69,22 @@ namespace ToolsUI
             ttpLogViewer = new ToolTip(components);
             pnlBottom = new Panel();
             txtLogPath = new TextBox();
-            pnlOptions = new Panel();
-            clbOptions = new CheckedListBox();
-            label1 = new Label();
-            pnlArchives = new Panel();
-            lblArchiveTypes = new Label();
-            clbArchiveTypes = new CheckedListBox();
-            pnlRightFlow = new FlowLayoutPanel();
-            pnlMetaTags = new Panel();
-            lblAutoRotate = new Label();
-            lblVerbose = new Label();
-            lblRawIncluded = new Label();
-            lblCompression = new Label();
-            lblArchiveType = new Label();
-            grpFromatInfo = new GroupBox();
-            lblFallbackCount = new Label();
-            lblParsedCount = new Label();
-            lblFormatMode = new Label();
+            clbSearchOptions = new CheckedListBox();
             pnlControls.SuspendLayout();
+            pnlSearch.SuspendLayout();
             tabLogs.SuspendLayout();
             pgeGrid.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgvLogs).BeginInit();
             pgeRaw.SuspendLayout();
             pnlBottom.SuspendLayout();
-            pnlOptions.SuspendLayout();
-            pnlArchives.SuspendLayout();
-            pnlRightFlow.SuspendLayout();
-            pnlMetaTags.SuspendLayout();
-            grpFromatInfo.SuspendLayout();
             SuspendLayout();
             // 
             // pnlControls
             // 
+            pnlControls.Controls.Add(clbSearchOptions);
+            pnlControls.Controls.Add(pnlSearch);
             pnlControls.Controls.Add(btnClose);
             pnlControls.Controls.Add(btnEmpty);
-            pnlControls.Controls.Add(btnSearch);
             pnlControls.Controls.Add(btnRefresh);
             pnlControls.Controls.Add(btnArchive);
             pnlControls.Controls.Add(btnInvert);
@@ -106,12 +92,79 @@ namespace ToolsUI
             pnlControls.Dock = DockStyle.Top;
             pnlControls.Location = new Point(0, 0);
             pnlControls.Name = "pnlControls";
-            pnlControls.Size = new Size(985, 46);
+            pnlControls.Size = new Size(759, 114);
             pnlControls.TabIndex = 0;
+            // 
+            // pnlSearch
+            // 
+            pnlSearch.Controls.Add(btnPrevious);
+            pnlSearch.Controls.Add(btnNext);
+            pnlSearch.Controls.Add(btnClearFilter);
+            pnlSearch.Controls.Add(txtSearch);
+            pnlSearch.Controls.Add(btnSearch);
+            pnlSearch.Location = new Point(9, 40);
+            pnlSearch.Name = "pnlSearch";
+            pnlSearch.Size = new Size(615, 36);
+            pnlSearch.TabIndex = 7;
+            // 
+            // btnPrevious
+            // 
+            btnPrevious.Location = new Point(528, 6);
+            btnPrevious.Name = "btnPrevious";
+            btnPrevious.Size = new Size(75, 23);
+            btnPrevious.TabIndex = 8;
+            btnPrevious.Tag = "FindPrev";
+            btnPrevious.Text = "Previous";
+            ttpLogViewer.SetToolTip(btnPrevious, "Finds Previous Occurrence");
+            btnPrevious.UseVisualStyleBackColor = true;
+            btnPrevious.Click += Button_Click;
+            // 
+            // btnNext
+            // 
+            btnNext.Location = new Point(444, 6);
+            btnNext.Name = "btnNext";
+            btnNext.Size = new Size(75, 23);
+            btnNext.TabIndex = 7;
+            btnNext.Tag = "FindNext";
+            btnNext.Text = "Next";
+            ttpLogViewer.SetToolTip(btnNext, "Finds Next Occurrence");
+            btnNext.UseVisualStyleBackColor = true;
+            btnNext.Click += Button_Click;
+            // 
+            // btnClearFilter
+            // 
+            btnClearFilter.Location = new Point(363, 6);
+            btnClearFilter.Name = "btnClearFilter";
+            btnClearFilter.Size = new Size(75, 23);
+            btnClearFilter.TabIndex = 6;
+            btnClearFilter.Tag = "ClearFilter";
+            btnClearFilter.Text = "Clear Filter";
+            ttpLogViewer.SetToolTip(btnClearFilter, "Clears the Filter");
+            btnClearFilter.UseVisualStyleBackColor = true;
+            btnClearFilter.Click += Button_Click;
+            // 
+            // txtSearch
+            // 
+            txtSearch.Location = new Point(85, 6);
+            txtSearch.Name = "txtSearch";
+            txtSearch.Size = new Size(272, 23);
+            txtSearch.TabIndex = 5;
+            // 
+            // btnSearch
+            // 
+            btnSearch.Location = new Point(3, 6);
+            btnSearch.Name = "btnSearch";
+            btnSearch.Size = new Size(75, 23);
+            btnSearch.TabIndex = 4;
+            btnSearch.Tag = "Search";
+            btnSearch.Text = "&Search";
+            ttpLogViewer.SetToolTip(btnSearch, "Searches the log");
+            btnSearch.UseVisualStyleBackColor = true;
+            btnSearch.Click += Button_Click;
             // 
             // btnClose
             // 
-            btnClose.Location = new Point(561, 10);
+            btnClose.Location = new Point(459, 10);
             btnClose.Name = "btnClose";
             btnClose.Size = new Size(75, 23);
             btnClose.TabIndex = 6;
@@ -123,7 +176,7 @@ namespace ToolsUI
             // 
             // btnEmpty
             // 
-            btnEmpty.Location = new Point(469, 10);
+            btnEmpty.Location = new Point(367, 10);
             btnEmpty.Name = "btnEmpty";
             btnEmpty.Size = new Size(75, 23);
             btnEmpty.TabIndex = 5;
@@ -133,21 +186,9 @@ namespace ToolsUI
             btnEmpty.UseVisualStyleBackColor = true;
             btnEmpty.Click += Button_Click;
             // 
-            // btnSearch
-            // 
-            btnSearch.Location = new Point(101, 10);
-            btnSearch.Name = "btnSearch";
-            btnSearch.Size = new Size(75, 23);
-            btnSearch.TabIndex = 4;
-            btnSearch.Tag = "Search";
-            btnSearch.Text = "&Search";
-            ttpLogViewer.SetToolTip(btnSearch, "Searches the log");
-            btnSearch.UseVisualStyleBackColor = true;
-            btnSearch.Click += Button_Click;
-            // 
             // btnRefresh
             // 
-            btnRefresh.Location = new Point(193, 10);
+            btnRefresh.Location = new Point(91, 10);
             btnRefresh.Name = "btnRefresh";
             btnRefresh.Size = new Size(75, 23);
             btnRefresh.TabIndex = 3;
@@ -159,7 +200,7 @@ namespace ToolsUI
             // 
             // btnArchive
             // 
-            btnArchive.Location = new Point(377, 10);
+            btnArchive.Location = new Point(275, 10);
             btnArchive.Name = "btnArchive";
             btnArchive.Size = new Size(75, 23);
             btnArchive.TabIndex = 2;
@@ -171,7 +212,7 @@ namespace ToolsUI
             // 
             // btnInvert
             // 
-            btnInvert.Location = new Point(285, 10);
+            btnInvert.Location = new Point(183, 10);
             btnInvert.Name = "btnInvert";
             btnInvert.Size = new Size(75, 23);
             btnInvert.TabIndex = 1;
@@ -198,10 +239,10 @@ namespace ToolsUI
             tabLogs.Controls.Add(pgeGrid);
             tabLogs.Controls.Add(pgeRaw);
             tabLogs.Dock = DockStyle.Fill;
-            tabLogs.Location = new Point(0, 46);
+            tabLogs.Location = new Point(0, 114);
             tabLogs.Name = "tabLogs";
             tabLogs.SelectedIndex = 0;
-            tabLogs.Size = new Size(807, 509);
+            tabLogs.Size = new Size(759, 441);
             tabLogs.TabIndex = 1;
             // 
             // pgeGrid
@@ -210,7 +251,7 @@ namespace ToolsUI
             pgeGrid.Location = new Point(4, 24);
             pgeGrid.Name = "pgeGrid";
             pgeGrid.Padding = new Padding(3);
-            pgeGrid.Size = new Size(799, 481);
+            pgeGrid.Size = new Size(751, 413);
             pgeGrid.TabIndex = 1;
             pgeGrid.Text = "Structured Logs";
             pgeGrid.UseVisualStyleBackColor = true;
@@ -225,7 +266,7 @@ namespace ToolsUI
             dgvLogs.Location = new Point(3, 3);
             dgvLogs.Name = "dgvLogs";
             dgvLogs.ReadOnly = true;
-            dgvLogs.Size = new Size(793, 475);
+            dgvLogs.Size = new Size(745, 407);
             dgvLogs.TabIndex = 0;
             // 
             // colTimestamp
@@ -287,7 +328,7 @@ namespace ToolsUI
             pgeRaw.Location = new Point(4, 24);
             pgeRaw.Name = "pgeRaw";
             pgeRaw.Padding = new Padding(3);
-            pgeRaw.Size = new Size(977, 636);
+            pgeRaw.Size = new Size(670, 445);
             pgeRaw.TabIndex = 0;
             pgeRaw.Text = "Raw Logs";
             pgeRaw.UseVisualStyleBackColor = true;
@@ -298,7 +339,7 @@ namespace ToolsUI
             rtbLogs.Location = new Point(3, 3);
             rtbLogs.Name = "rtbLogs";
             rtbLogs.ReadOnly = true;
-            rtbLogs.Size = new Size(971, 630);
+            rtbLogs.Size = new Size(664, 439);
             rtbLogs.TabIndex = 0;
             rtbLogs.Text = "";
             // 
@@ -308,7 +349,7 @@ namespace ToolsUI
             pnlBottom.Dock = DockStyle.Bottom;
             pnlBottom.Location = new Point(0, 555);
             pnlBottom.Name = "pnlBottom";
-            pnlBottom.Size = new Size(985, 29);
+            pnlBottom.Size = new Size(759, 29);
             pnlBottom.TabIndex = 2;
             // 
             // txtLogPath
@@ -318,200 +359,26 @@ namespace ToolsUI
             txtLogPath.Location = new Point(0, 6);
             txtLogPath.Name = "txtLogPath";
             txtLogPath.ReadOnly = true;
-            txtLogPath.Size = new Size(985, 23);
+            txtLogPath.Size = new Size(759, 23);
             txtLogPath.TabIndex = 0;
             // 
-            // pnlOptions
+            // clbSearchOptions
             // 
-            pnlOptions.AutoSize = true;
-            pnlOptions.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            pnlOptions.Controls.Add(clbOptions);
-            pnlOptions.Controls.Add(label1);
-            pnlOptions.Location = new Point(3, 269);
-            pnlOptions.Name = "pnlOptions";
-            pnlOptions.Size = new Size(172, 118);
-            pnlOptions.TabIndex = 10;
-            // 
-            // clbOptions
-            // 
-            clbOptions.FormattingEnabled = true;
-            clbOptions.Location = new Point(0, 21);
-            clbOptions.Name = "clbOptions";
-            clbOptions.Size = new Size(169, 94);
-            clbOptions.TabIndex = 1;
-            clbOptions.Tag = "LoggerOption";
-            clbOptions.ItemCheck += CheckedListBox_ItemCheck;
-            // 
-            // label1
-            // 
-            label1.AutoSize = true;
-            label1.Location = new Point(59, 3);
-            label1.Name = "label1";
-            label1.Size = new Size(50, 15);
-            label1.TabIndex = 0;
-            label1.Text = "Options";
-            // 
-            // pnlArchives
-            // 
-            pnlArchives.AutoSize = true;
-            pnlArchives.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            pnlArchives.Controls.Add(lblArchiveTypes);
-            pnlArchives.Controls.Add(clbArchiveTypes);
-            pnlArchives.Location = new Point(0, 0);
-            pnlArchives.Margin = new Padding(0);
-            pnlArchives.MinimumSize = new Size(175, 0);
-            pnlArchives.Name = "pnlArchives";
-            pnlArchives.Size = new Size(175, 154);
-            pnlArchives.TabIndex = 9;
-            // 
-            // lblArchiveTypes
-            // 
-            lblArchiveTypes.AutoSize = true;
-            lblArchiveTypes.Location = new Point(42, 3);
-            lblArchiveTypes.Name = "lblArchiveTypes";
-            lblArchiveTypes.Size = new Size(84, 15);
-            lblArchiveTypes.TabIndex = 8;
-            lblArchiveTypes.Text = "Archive Types";
-            // 
-            // clbArchiveTypes
-            // 
-            clbArchiveTypes.CheckOnClick = true;
-            clbArchiveTypes.FormattingEnabled = true;
-            clbArchiveTypes.Location = new Point(19, 21);
-            clbArchiveTypes.Name = "clbArchiveTypes";
-            clbArchiveTypes.Size = new Size(131, 130);
-            clbArchiveTypes.TabIndex = 0;
-            clbArchiveTypes.Tag = "ArchiveType";
-            clbArchiveTypes.ItemCheck += CheckedListBox_ItemCheck;
-            // 
-            // pnlRightFlow
-            // 
-            pnlRightFlow.AutoSize = true;
-            pnlRightFlow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            pnlRightFlow.Controls.Add(pnlArchives);
-            pnlRightFlow.Controls.Add(pnlMetaTags);
-            pnlRightFlow.Controls.Add(pnlOptions);
-            pnlRightFlow.Controls.Add(grpFromatInfo);
-            pnlRightFlow.Dock = DockStyle.Right;
-            pnlRightFlow.FlowDirection = FlowDirection.TopDown;
-            pnlRightFlow.Location = new Point(807, 46);
-            pnlRightFlow.MinimumSize = new Size(175, 0);
-            pnlRightFlow.Name = "pnlRightFlow";
-            pnlRightFlow.Size = new Size(178, 509);
-            pnlRightFlow.TabIndex = 4;
-            pnlRightFlow.WrapContents = false;
-            // 
-            // pnlMetaTags
-            // 
-            pnlMetaTags.Controls.Add(lblAutoRotate);
-            pnlMetaTags.Controls.Add(lblVerbose);
-            pnlMetaTags.Controls.Add(lblRawIncluded);
-            pnlMetaTags.Controls.Add(lblCompression);
-            pnlMetaTags.Controls.Add(lblArchiveType);
-            pnlMetaTags.Location = new Point(0, 154);
-            pnlMetaTags.Margin = new Padding(0);
-            pnlMetaTags.Name = "pnlMetaTags";
-            pnlMetaTags.Size = new Size(175, 112);
-            pnlMetaTags.TabIndex = 11;
-            // 
-            // lblAutoRotate
-            // 
-            lblAutoRotate.AutoSize = true;
-            lblAutoRotate.Location = new Point(22, 89);
-            lblAutoRotate.Name = "lblAutoRotate";
-            lblAutoRotate.Size = new Size(78, 15);
-            lblAutoRotate.TabIndex = 4;
-            lblAutoRotate.Tag = "AutoRotateLogs";
-            lblAutoRotate.Text = "Auto Rotate:";
-            // 
-            // lblVerbose
-            // 
-            lblVerbose.AutoSize = true;
-            lblVerbose.Location = new Point(22, 68);
-            lblVerbose.Name = "lblVerbose";
-            lblVerbose.Size = new Size(102, 15);
-            lblVerbose.TabIndex = 3;
-            lblVerbose.Tag = "VerboseArchiveLogging";
-            lblVerbose.Text = "Verbose Logging:";
-            // 
-            // lblRawIncluded
-            // 
-            lblRawIncluded.AutoSize = true;
-            lblRawIncluded.Location = new Point(22, 47);
-            lblRawIncluded.Name = "lblRawIncluded";
-            lblRawIncluded.Size = new Size(62, 15);
-            lblRawIncluded.TabIndex = 2;
-            lblRawIncluded.Tag = "IncludeRawLogs";
-            lblRawIncluded.Text = "Raw Logs:";
-            // 
-            // lblCompression
-            // 
-            lblCompression.AutoSize = true;
-            lblCompression.Location = new Point(22, 26);
-            lblCompression.Name = "lblCompression";
-            lblCompression.Size = new Size(81, 15);
-            lblCompression.TabIndex = 1;
-            lblCompression.Tag = "EnableCompression";
-            lblCompression.Text = "Compression:";
-            // 
-            // lblArchiveType
-            // 
-            lblArchiveType.AutoSize = true;
-            lblArchiveType.Location = new Point(22, 5);
-            lblArchiveType.Name = "lblArchiveType";
-            lblArchiveType.Size = new Size(82, 15);
-            lblArchiveType.TabIndex = 0;
-            lblArchiveType.Tag = "ArchiveType";
-            lblArchiveType.Text = "Archive Type:";
-            // 
-            // grpFromatInfo
-            // 
-            grpFromatInfo.Controls.Add(lblFallbackCount);
-            grpFromatInfo.Controls.Add(lblParsedCount);
-            grpFromatInfo.Controls.Add(lblFormatMode);
-            grpFromatInfo.Dock = DockStyle.Top;
-            grpFromatInfo.Location = new Point(3, 393);
-            grpFromatInfo.Name = "grpFromatInfo";
-            grpFromatInfo.Padding = new Padding(0);
-            grpFromatInfo.Size = new Size(172, 80);
-            grpFromatInfo.TabIndex = 12;
-            grpFromatInfo.TabStop = false;
-            grpFromatInfo.Text = "Format Info";
-            // 
-            // lblFallbackCount
-            // 
-            lblFallbackCount.AutoSize = true;
-            lblFallbackCount.Location = new Point(32, 55);
-            lblFallbackCount.Name = "lblFallbackCount";
-            lblFallbackCount.Size = new Size(64, 15);
-            lblFallbackCount.TabIndex = 2;
-            lblFallbackCount.Text = "Fallback: 0";
-            // 
-            // lblParsedCount
-            // 
-            lblParsedCount.AutoSize = true;
-            lblParsedCount.Location = new Point(32, 36);
-            lblParsedCount.Name = "lblParsedCount";
-            lblParsedCount.Size = new Size(57, 15);
-            lblParsedCount.TabIndex = 1;
-            lblParsedCount.Text = "Parsed: 0";
-            // 
-            // lblFormatMode
-            // 
-            lblFormatMode.AutoSize = true;
-            lblFormatMode.Location = new Point(32, 17);
-            lblFormatMode.Name = "lblFormatMode";
-            lblFormatMode.Size = new Size(99, 15);
-            lblFormatMode.TabIndex = 0;
-            lblFormatMode.Text = "Mode: Unknown";
+            clbSearchOptions.CheckOnClick = true;
+            clbSearchOptions.FormattingEnabled = true;
+            clbSearchOptions.Items.AddRange(new object[] { "Case Sensitive", "Regex", "Highlight All", "Whole Word", "Multiline" });
+            clbSearchOptions.Location = new Point(630, 3);
+            clbSearchOptions.Name = "clbSearchOptions";
+            clbSearchOptions.Size = new Size(120, 94);
+            clbSearchOptions.TabIndex = 8;
+            ttpLogViewer.SetToolTip(clbSearchOptions, "Search Options");
             // 
             // FrmLogViewer
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(985, 584);
+            ClientSize = new Size(759, 584);
             Controls.Add(tabLogs);
-            Controls.Add(pnlRightFlow);
             Controls.Add(pnlControls);
             Controls.Add(pnlBottom);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
@@ -520,24 +387,15 @@ namespace ToolsUI
             Text = "Log Viewer";
             FormClosing += FrmLogViewer_FormClosing;
             pnlControls.ResumeLayout(false);
+            pnlSearch.ResumeLayout(false);
+            pnlSearch.PerformLayout();
             tabLogs.ResumeLayout(false);
             pgeGrid.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dgvLogs).EndInit();
             pgeRaw.ResumeLayout(false);
             pnlBottom.ResumeLayout(false);
             pnlBottom.PerformLayout();
-            pnlOptions.ResumeLayout(false);
-            pnlOptions.PerformLayout();
-            pnlArchives.ResumeLayout(false);
-            pnlArchives.PerformLayout();
-            pnlRightFlow.ResumeLayout(false);
-            pnlRightFlow.PerformLayout();
-            pnlMetaTags.ResumeLayout(false);
-            pnlMetaTags.PerformLayout();
-            grpFromatInfo.ResumeLayout(false);
-            grpFromatInfo.PerformLayout();
             ResumeLayout(false);
-            PerformLayout();
         }
 
         #endregion
@@ -564,22 +422,11 @@ namespace ToolsUI
         private DataGridViewTextBoxColumn colFacility;
         private DataGridViewTextBoxColumn colSeverity;
         private DataGridViewTextBoxColumn colMessage;
-        private CheckedListBox clbArchiveTypes;
-        private Panel pnlArchives;
-        private Label lblArchiveTypes;
-        private Panel pnlOptions;
-        private Label label1;
-        private CheckedListBox clbOptions;
-        private FlowLayoutPanel pnlRightFlow;
-        private Panel pnlMetaTags;
-        private Label lblVerbose;
-        private Label lblRawIncluded;
-        private Label lblCompression;
-        private Label lblArchiveType;
-        private Label lblAutoRotate;
-        private GroupBox grpFromatInfo;
-        private Label lblFallbackCount;
-        private Label lblParsedCount;
-        private Label lblFormatMode;
+        private Panel pnlSearch;
+        private TextBox txtSearch;
+        private Button btnClearFilter;
+        private Button btnNext;
+        private Button btnPrevious;
+        private CheckedListBox clbSearchOptions;
     }
 }

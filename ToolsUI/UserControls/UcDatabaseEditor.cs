@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcDatabaseEditor.cs
  * File: UcDatabaseEditor.cs
- * Version: 1.0.3
+ * Version: 1.0.4
  * Created: 2026-05-12
- * Modified: 2026-08-18
+ * Modified: 2026-08-22
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -294,7 +294,7 @@ namespace ToolsUI.UserControls
                         break;
                     case "Remove":
                         RemoveConnection();
-                        RequestClose();
+                        RequestRefresh();
                         break;
                     case "Show":
                         TogglePassword(txtPassword, btn);
@@ -319,7 +319,7 @@ namespace ToolsUI.UserControls
                         break;
                     case "Update":
                         SaveConnection();   // update host, port, engine, schema, etc.
-                        RequestClose();
+                        RequestRefresh();
                         break;
 
                 }

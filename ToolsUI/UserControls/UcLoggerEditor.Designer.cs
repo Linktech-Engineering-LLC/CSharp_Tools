@@ -10,9 +10,9 @@
  * Program: ToolsUI.dll
  * Path: Tools/ToolsUI/UserControls/UcLoggerEditor.Designer.cs
  * File: UcLoggerEditor.Designer.cs
- * Version: 1.0.3
+ * Version: 1.0.4
  * Created: 2026-06-05
- * Modified: 2026-08-19
+ * Modified: 2026-08-22
  * Author: Leon McClatchey
  * Company: Linktech Engineering, LLC
  * Description:
@@ -91,7 +91,7 @@ namespace ToolsUI.UserControls
             pnlRoot.Controls.Add(grpBehavior);
             pnlRoot.Location = new Point(3, 3);
             pnlRoot.Name = "pnlRoot";
-            pnlRoot.Size = new Size(462, 367);
+            pnlRoot.Size = new Size(466, 367);
             pnlRoot.TabIndex = 0;
             // 
             // btnUpdate
@@ -128,6 +128,7 @@ namespace ToolsUI.UserControls
             txtArchiveDirectory.ScrollBars = ScrollBars.Horizontal;
             txtArchiveDirectory.Size = new Size(324, 23);
             txtArchiveDirectory.TabIndex = 5;
+            toolTip1.SetToolTip(txtArchiveDirectory, "Log Archive Directory\r\nDefaults to Archives under Log Directory\r\nClicking Opens the Path Editor");
             // 
             // label3
             // 
@@ -146,6 +147,7 @@ namespace ToolsUI.UserControls
             txtRotateDirectory.ScrollBars = ScrollBars.Horizontal;
             txtRotateDirectory.Size = new Size(324, 23);
             txtRotateDirectory.TabIndex = 3;
+            toolTip1.SetToolTip(txtRotateDirectory, "Log Rotation Directory,\r\nDefaults to Rotate under Log Directory\r\nClicking opens the Path Editor");
             // 
             // label2
             // 
@@ -164,6 +166,7 @@ namespace ToolsUI.UserControls
             txtLogDirectory.ScrollBars = ScrollBars.Horizontal;
             txtLogDirectory.Size = new Size(324, 23);
             txtLogDirectory.TabIndex = 1;
+            toolTip1.SetToolTip(txtLogDirectory, "Base Logging Directory, Required\r\nClicking will open the Path Editor");
             // 
             // label1
             // 
@@ -191,6 +194,7 @@ namespace ToolsUI.UserControls
             clbOptions.Name = "clbOptions";
             clbOptions.Size = new Size(166, 166);
             clbOptions.TabIndex = 7;
+            toolTip1.SetToolTip(clbOptions, "Flags that determines how the logs are managed");
             // 
             // grpRotation
             // 
@@ -224,9 +228,9 @@ namespace ToolsUI.UserControls
             numRetention.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numRetention.Name = "numRetention";
             numRetention.Placeholder = "";
-            numRetention.Size = new Size(100, 23);
+            numRetention.Size = new Size(86, 23);
             numRetention.TabIndex = 11;
-            numRetention.Text = "0";
+            toolTip1.SetToolTip(numRetention, "Number of units the log is to be retained");
             numRetention.Value = new decimal(new int[] { 0, 0, 0, 0 });
             // 
             // numMaxLogSize
@@ -242,35 +246,37 @@ namespace ToolsUI.UserControls
             numMaxLogSize.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numMaxLogSize.Name = "numMaxLogSize";
             numMaxLogSize.Placeholder = "";
-            numMaxLogSize.Size = new Size(100, 23);
+            numMaxLogSize.Size = new Size(86, 23);
             numMaxLogSize.TabIndex = 10;
-            numMaxLogSize.Text = "0";
+            toolTip1.SetToolTip(numMaxLogSize, "Max Log Size, Numeric Only");
             numMaxLogSize.Value = new decimal(new int[] { 0, 0, 0, 0 });
             // 
             // cboRetention
             // 
             cboRetention.FormattingEnabled = true;
             cboRetention.Items.AddRange(new object[] { "Days", "Weeks", "Months", "Years" });
-            cboRetention.Location = new Point(211, 74);
+            cboRetention.Location = new Point(197, 74);
             cboRetention.Name = "cboRetention";
-            cboRetention.Size = new Size(54, 23);
+            cboRetention.Size = new Size(68, 23);
             cboRetention.TabIndex = 9;
+            toolTip1.SetToolTip(cboRetention, "That Units of Log Retainment, \r\nDays, Weeks, Months, Years");
             // 
             // cboSize
             // 
             cboSize.FormattingEnabled = true;
             cboSize.Items.AddRange(new object[] { "B", "K", "M", "G", "T" });
-            cboSize.Location = new Point(211, 45);
+            cboSize.Location = new Point(197, 45);
             cboSize.Name = "cboSize";
-            cboSize.Size = new Size(54, 23);
+            cboSize.Size = new Size(68, 23);
             cboSize.TabIndex = 8;
+            toolTip1.SetToolTip(cboSize, "Max Log Size Units\r\nB = Bytes\r\nK = KiloBytes\r\nM = MegaBytes\r\nG = GigaBytes\r\nT = TerraBytes");
             // 
             // cboArchiveType
             // 
             cboArchiveType.FormattingEnabled = true;
             cboArchiveType.Location = new Point(104, 103);
             cboArchiveType.Name = "cboArchiveType";
-            cboArchiveType.Size = new Size(121, 23);
+            cboArchiveType.Size = new Size(161, 23);
             cboArchiveType.TabIndex = 7;
             cboArchiveType.Tag = "ArchiveType";
             toolTip1.SetToolTip(cboArchiveType, "Type of Log Archive");
@@ -307,7 +313,7 @@ namespace ToolsUI.UserControls
             cboRotationType.FormattingEnabled = true;
             cboRotationType.Location = new Point(104, 16);
             cboRotationType.Name = "cboRotationType";
-            cboRotationType.Size = new Size(121, 23);
+            cboRotationType.Size = new Size(161, 23);
             cboRotationType.TabIndex = 1;
             cboRotationType.Tag = "RotationType";
             toolTip1.SetToolTip(cboRotationType, "Type of Log Rotation");
@@ -358,7 +364,7 @@ namespace ToolsUI.UserControls
             Controls.Add(pnlRoot);
             Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             Name = "UcLoggerEditor";
-            Size = new Size(479, 381);
+            Size = new Size(473, 381);
             pnlRoot.ResumeLayout(false);
             grpLocations.ResumeLayout(false);
             grpLocations.PerformLayout();
